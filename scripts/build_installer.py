@@ -5,8 +5,8 @@ import subprocess
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parent
-SCRIPT = ROOT / "installer" / "SheetSync.iss"
+ROOT = Path(__file__).resolve().parents[1]
+SCRIPT = ROOT / "packaging" / "installer" / "SheetSync.iss"
 
 
 def find_iscc() -> str:
@@ -26,7 +26,7 @@ def find_iscc() -> str:
 
 def main() -> int:
     if not (ROOT / "dist" / "SheetSync.exe").exists():
-        raise SystemExit("Missing dist/SheetSync.exe. Run python build.py first.")
+        raise SystemExit("Missing dist/SheetSync.exe. Run python scripts/build.py first.")
     if not SCRIPT.exists():
         raise SystemExit(f"Missing installer script: {SCRIPT}")
     return subprocess.call([find_iscc(), str(SCRIPT)], cwd=ROOT)

@@ -4,8 +4,8 @@ import threading
 
 import flet as ft
 
-from core.google_auth import AuthError, connect_google, credentials_configured, fetch_sheet_metadata, save_credentials_file, save_credentials_json, sheet_id_from_url
-from core.storage import AppConfig, save_config
+from sheetsync.core.google_auth import AuthError, connect_google, credentials_configured, fetch_sheet_metadata, save_credentials_file, save_credentials_json, sheet_id_from_url
+from sheetsync.core.storage import AppConfig, save_config
 from .components import app_textfield, badge, border_all, card, file_label, icon, outline_button, primary_button, toast
 from .theme import body, caption, display, heading, tokens
 

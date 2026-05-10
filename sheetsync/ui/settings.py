@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import flet as ft
 
-from core.storage import AppConfig
+from sheetsync.core.storage import AppConfig
 from .components import app_textfield, outline_button, primary_button, section_card
 from .theme import caption, tokens
 

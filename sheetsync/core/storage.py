@@ -16,7 +16,7 @@ def app_root() -> Path:
             path.mkdir(parents=True, exist_ok=True)
             return path
         return Path(sys.executable).resolve().parent
-    return Path(__file__).resolve().parents[1]
+    return Path(__file__).resolve().parents[2]
 
 
 APP_DIR = app_root()

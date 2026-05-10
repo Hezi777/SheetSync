@@ -7,16 +7,20 @@ from pathlib import Path
 import flet as ft
 from plyer import notification
 
-from core.google_auth import AuthError, disconnect, fetch_sheet_metadata, sheet_id_from_url
-from core.storage import AppConfig, has_crash_lock, load_activity, load_config, reset_all, save_activity, save_config
-from core.syncer import SyncEngine, SyncError, export_activity_csv
-from core.tray import TrayController
-from core.watcher import ExcelWatcher
-from ui.components import icon, nav_item, toast
-from ui.dashboard import ActivityLogView, DashboardView
-from ui.onboarding import Onboarding
-from ui.settings import SettingsView
-from ui.theme import apply_page_theme, caption, display, tokens
+from sheetsync.core.google_auth import AuthError, disconnect, fetch_sheet_metadata, sheet_id_from_url
+from sheetsync.core.storage import AppConfig, has_crash_lock, load_activity, load_config, reset_all, save_activity, save_config
+from sheetsync.core.syncer import SyncEngine, SyncError, export_activity_csv
+from sheetsync.core.tray import TrayController
+from sheetsync.core.watcher import ExcelWatcher
+from sheetsync.ui.components import icon, nav_item, toast
+from sheetsync.ui.dashboard import ActivityLogView, DashboardView
+from sheetsync.ui.onboarding import Onboarding
+from sheetsync.ui.settings import SettingsView
+from sheetsync.ui.theme import apply_page_theme, caption, display, tokens
+
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+ASSETS_DIR = PROJECT_ROOT / "assets"
 
 
 class SheetSyncApp:
@@ -51,7 +55,7 @@ class SheetSyncApp:
             self.page.window.left = self.config.window_left
         if self.config.window_top is not None:
             self.page.window.top = self.config.window_top
-        self.page.fonts = {"Inter": "assets/fonts/Inter.ttf", "JetBrains Mono": "assets/fonts/JetBrainsMono.ttf"}
+        self.page.fonts = {"Inter": "fonts/Inter.ttf", "JetBrains Mono": "fonts/JetBrainsMono.ttf"}
         self.page.sheetsync_theme = self.config.theme
         self.page.on_window_event = self.on_window_event
         apply_page_theme(self.page, self.config.theme)
@@ -313,4 +317,4 @@ def main(page: ft.Page):
 
 
 if __name__ == "__main__":
-    ft.app(target=main, assets_dir="assets")
+    ft.app(target=main, assets_dir=str(ASSETS_DIR))

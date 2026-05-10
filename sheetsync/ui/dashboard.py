@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import flet as ft
 
-from core.storage import AppConfig
+from sheetsync.core.storage import AppConfig
 from .components import badge, border_all, card, empty_state, file_label, icon, outline_button, padding_symmetric, primary_button, status_dot
 from .theme import body, caption, display, heading, tokens
 

@@ -20,10 +20,10 @@ class TrayController:
     def start(self) -> None:
         if self.icon:
             return
-        base_dir = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
+        base_dir = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2]))
         image_path = base_dir / "assets" / "icons" / "app_logo_256.png"
         if not image_path.exists():
-            image_path = Path(__file__).resolve().parents[1] / "assets" / "icons" / "app_logo_256.png"
+            image_path = Path(__file__).resolve().parents[2] / "assets" / "icons" / "app_logo_256.png"
         image = Image.open(image_path).convert("RGBA").resize((64, 64))
         menu = pystray.Menu(
             pystray.MenuItem("Open", lambda: self.on_open()),

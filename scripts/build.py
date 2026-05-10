@@ -4,7 +4,7 @@ import subprocess
 from pathlib import Path
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 ICON = ROOT / "assets" / "icons" / "app.ico"
 
 
@@ -14,7 +14,7 @@ def main() -> int:
     command = [
         "flet",
         "pack",
-        "main.py",
+        "sheetsync/main.py",
         "--name",
         "SheetSync",
         "--icon",
