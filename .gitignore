@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+
+# Local SheetSync runtime state
+config.json
+token.json
+credentials.json
+activity.json
+sync_queue.json
+.sheetsync.lock
+
+# OAuth secrets
+assets/oauth_client.json
+
+# Build outputs
+build/
+dist/
+*.spec
+installer/Output/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

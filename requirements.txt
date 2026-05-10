@@ -1,0 +1,10 @@
+flet[desktop]==0.85.0
+watchdog==6.0.0
+openpyxl==3.1.5
+gspread==6.2.1
+google-auth==2.52.0
+google-auth-oauthlib==1.4.0
+plyer==2.1.0
+pystray==0.19.5
+Pillow==12.2.0
+pyinstaller==6.20.0
