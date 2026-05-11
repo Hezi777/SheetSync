@@ -23,6 +23,13 @@ dist/
 *.spec
 installer/Output/
 
+# Test builds
+tests/*.exe
+tests/setup/
+
+# Playwright MCP scratch files
+.playwright-mcp/
+
 # OS/editor noise
 .DS_Store
 Thumbs.db
