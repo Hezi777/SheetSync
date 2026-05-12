@@ -13,7 +13,7 @@ from openpyxl import load_workbook
 from openpyxl.workbook import Workbook
 
 from .google_auth import AuthError, get_client
-from .storage import AppConfig, clear_lock, create_lock, load_queue, save_config, save_queue
+from .storage import AppConfig, SyncPairConfig, clear_lock, create_lock, ensure_pair, load_queue, save_config, save_queue
 
 
 StatusCallback = Callable[[dict], None]
@@ -92,7 +92,7 @@ def write_excel(path: str, table: TableData) -> None:
     raise SyncError("Waiting for Excel to release file") from last_error
 
 
-def read_sheet(client: gspread.Client, config: AppConfig) -> tuple[gspread.Worksheet, TableData]:
+def read_sheet(client: gspread.Client, config: AppConfig | SyncPairConfig) -> tuple[gspread.Worksheet, TableData]:
     spreadsheet = client.open_by_key(config.sheet_id)
     worksheet = spreadsheet.worksheet(config.worksheet_name) if config.worksheet_name else spreadsheet.sheet1
     values = worksheet.get_all_values()
@@ -137,20 +137,20 @@ def merge_headers(a: list[str], b: list[str]) -> list[str]:
     return merged
 
 
-def row_map(table: TableData, key: str, config: AppConfig, side: str) -> dict[str, dict[str, object]]:
+def row_map(table: TableData, key: str, config: AppConfig | SyncPairConfig, side: str) -> dict[str, dict[str, object]]:
     if config.match_mode == "Column value":
         return rows_by_key(table, key, side)
     return rows_by_position(table)
 
 
-def ordered_keys(excel_map: dict[str, dict[str, object]], sheet_map: dict[str, dict[str, object]], config: AppConfig) -> list[str]:
+def ordered_keys(excel_map: dict[str, dict[str, object]], sheet_map: dict[str, dict[str, object]], config: AppConfig | SyncPairConfig) -> list[str]:
     keys = set(excel_map) | set(sheet_map)
     if config.match_mode == "Column value":
         return sorted(keys)
     return sorted(keys, key=lambda value: int(value))
 
 
-def compute_merge(excel: TableData, sheet: TableData, key: str, config: AppConfig) -> tuple[TableData, TableData, dict[str, int]]:
+def compute_merge(excel: TableData, sheet: TableData, key: str, config: AppConfig | SyncPairConfig) -> tuple[TableData, TableData, dict[str, int]]:
     excel_map = row_map(excel, key, config, "Excel file")
     sheet_map = row_map(sheet, key, config, "Google Sheet")
     headers = merge_headers(excel.headers, sheet.headers)
@@ -195,56 +195,68 @@ class SyncEngine:
     def emit(self, kind: str, message: str, **data: object) -> None:
         self.callback({"kind": kind, "message": message, **data})
 
-    def sync_now(self, reason: str = "manual") -> dict[str, int]:
-        if self.config.paused:
+    def sync_now(self, reason: str = "manual", pair_id: str | None = None) -> dict[str, int]:
+        pair = ensure_pair(self.config, pair_id)
+        if self.config.paused or pair.paused:
             raise SyncError("Sync is paused.")
-        if not self.config.excel_path:
+        if not pair.excel_path:
             raise SyncError("Choose an Excel file before syncing.")
-        if not self.config.sheet_id:
+        if not pair.sheet_id:
             raise SyncError("Connect a Google Sheet before syncing.")
         if not internet_available():
             queue = load_queue()
-            queue.append({"created_at": now_iso(), "reason": reason, "excel_path": self.config.excel_path})
+            queue.append({"created_at": now_iso(), "reason": reason, "pair_id": pair.id, "excel_path": pair.excel_path})
             save_queue(queue)
+            pair.queued_changes = sum(1 for item in queue if item.get("pair_id") == pair.id)
             self.config.queued_changes = len(queue)
             save_config(self.config)
             raise ConnectionError("Offline. Changes queued and will sync when the connection returns.")
         create_lock()
         self.emit("status", "Syncing...", state="syncing")
         try:
-            excel = read_excel(self.config.excel_path)
+            excel = read_excel(pair.excel_path)
             client = get_client(interactive=False)
-            worksheet, sheet = read_sheet(client, self.config)
-            excel_out, sheet_out, stats = compute_merge(excel, sheet, self.config.match_column, self.config)
-            should_write_excel = self.config.sync_direction in ("Bidirectional", "Sheets -> Excel")
-            if reason == "Excel" and self.config.sync_direction == "Bidirectional":
+            worksheet, sheet = read_sheet(client, pair)
+            excel_out, sheet_out, stats = compute_merge(excel, sheet, pair.match_column, pair)
+            should_write_excel = pair.sync_direction in ("Bidirectional", "Sheets -> Excel")
+            if reason == "Excel" and pair.sync_direction == "Bidirectional":
                 should_write_excel = False
             if should_write_excel:
-                write_excel(self.config.excel_path, excel_out)
-            if self.config.sync_direction in ("Bidirectional", "Excel -> Sheets"):
+                write_excel(pair.excel_path, excel_out)
+            if pair.sync_direction in ("Bidirectional", "Excel -> Sheets"):
                 write_sheet(worksheet, sheet_out)
-            self.config.last_sync_iso = now_iso()
-            self.config.queued_changes = 0
+            pair.last_sync_iso = now_iso()
+            pair.queued_changes = 0
+            pair.stats["total_syncs"] += 1
+            pair.stats["rows_synced"] += stats["rows"]
+            pair.stats["conflicts_resolved"] += stats["conflicts"]
+            self.config.last_sync_iso = pair.last_sync_iso
+            self.config.queued_changes = sum(item.queued_changes for item in self.config.pairs)
             self.config.stats["total_syncs"] += 1
             self.config.stats["rows_synced"] += stats["rows"]
             self.config.stats["conflicts_resolved"] += stats["conflicts"]
-            save_queue([])
+            remaining_queue = [item for item in load_queue() if item.get("pair_id") != pair.id]
+            save_queue(remaining_queue)
             save_config(self.config)
             self.emit("synced", f"Synced {stats['rows']} rows", stats=stats)
             return stats
         except FileNotFoundError as exc:
+            pair.stats["errors"] += 1
             self.config.stats["errors"] += 1
             save_config(self.config)
             raise SyncError("Excel file not found. Locate the file to resume syncing.") from exc
         except PermissionError as exc:
+            pair.stats["errors"] += 1
             self.config.stats["errors"] += 1
             save_config(self.config)
             raise SyncError("Waiting for Excel to release file") from exc
         except AuthError:
+            pair.stats["errors"] += 1
             self.config.stats["errors"] += 1
             save_config(self.config)
             raise
         except gspread.SpreadsheetNotFound as exc:
+            pair.stats["errors"] += 1
             self.config.stats["errors"] += 1
             save_config(self.config)
             raise SyncError("Google Sheet was deleted or access was removed. Update the Sheet URL.") from exc
