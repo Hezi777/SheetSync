@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 ICON = ROOT / "assets" / "icons" / "app.ico"
 ENTRY = ROOT / "src" / "sheetsync_desktop.py"
-UI_DIR = ROOT / "src" / "sheetsync" / "ui"
+UI_DIR = ROOT / "src" / "sheetsync" / "ui" / "dist"
 
 
 def add_data_arg(source: Path, dest: str) -> str:
@@ -32,7 +32,7 @@ def main() -> int:
         "--icon",
         str(ICON),
         "--add-data",
-        add_data_arg(UI_DIR, "sheetsync/ui"),
+        add_data_arg(UI_DIR, "sheetsync/ui/dist"),
         str(ENTRY),
     ]
     return subprocess.call(command, cwd=ROOT)

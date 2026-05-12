@@ -130,7 +130,7 @@ def main() -> None:
 
     window = webview.create_window(
         "SheetSync",
-        str(APP_BASE / "index.html"),
+        str(APP_BASE / "dist" / "index.html"),
         js_api=app.api,
         width=app.config.window_width,
         height=app.config.window_height,

@@ -21,6 +21,8 @@ assets/oauth_client.json
 build/
 dist/
 *.spec
+# Keep the Vite-built UI assets so the desktop app runs without Node
+!src/sheetsync/ui/dist/
 !scripts/*.spec
 installer/Output/
 packaging/installer/Output/
