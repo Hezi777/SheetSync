@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import threading
+import webbrowser
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -15,6 +16,7 @@ from sheetsync.core.google_auth import (
     credentials_configured,
     disconnect,
     fetch_sheet_metadata,
+    get_credentials,
     save_credentials_file,
     save_credentials_json,
     sheet_id_from_url,
@@ -91,7 +93,7 @@ class Api:
             "direction": self._dir_key(pair.sync_direction),
             "lastSync": self._rel_time(pair.last_sync_iso),
             "every": "on change",
-            "state": "idle" if cfg.paused or pair.paused else "live",
+            "state": "idle" if cfg.paused or pair.paused or not cfg.setup_complete or not credentials_configured() else "live",
             "owner": cfg.google_email,
             "lastEditor": cfg.google_email,
             "lastEditedSide": "excel",
@@ -104,6 +106,41 @@ class Api:
 
     def _build_pairs(self) -> list[dict]:
         return [self._pair_payload(pair) for pair in self._app.config.pairs if pair.excel_path or pair.sheet_url]
+
+    def _find_pair(self, pair_id: str | None) -> SyncPairConfig | None:
+        if pair_id:
+            return next((pair for pair in self._app.config.pairs if pair.id == pair_id), None)
+        if self._app.config.active_pair_id:
+            found = next((pair for pair in self._app.config.pairs if pair.id == self._app.config.active_pair_id), None)
+            if found:
+                return found
+        return self._app.config.pairs[0] if self._app.config.pairs else None
+
+    def _setup_readiness(self) -> dict:
+        cfg = self._app.config
+        blockers: list[str] = []
+        if not credentials_configured():
+            blockers.append("credentials")
+        try:
+            get_credentials(interactive=False)
+        except AuthError:
+            blockers.append("google")
+        configured_pairs = [pair for pair in cfg.pairs if pair.excel_path or pair.sheet_url]
+        if not configured_pairs:
+            blockers.append("pair")
+        missing_excel = [pair.id for pair in configured_pairs if pair.excel_path and not Path(pair.excel_path).exists()]
+        if missing_excel:
+            blockers.append("excel")
+        invalid_sheets = [pair.id for pair in configured_pairs if pair.sheet_url and not sheet_id_from_url(pair.sheet_url)]
+        if invalid_sheets:
+            blockers.append("sheet")
+        ready = cfg.setup_complete and not blockers
+        return {
+            "ready": ready,
+            "setup_blockers": sorted(set(blockers)),
+            "missing_excel_paths": missing_excel,
+            "invalid_sheet_urls": invalid_sheets,
+        }
 
     @staticmethod
     def _convert_activity(entries: list[dict]) -> list[dict]:
@@ -127,8 +164,10 @@ class Api:
 
     def get_initial_data(self) -> dict:
         app = self._app
+        readiness = self._setup_readiness()
         return {
             "setup_complete": app.config.setup_complete,
+            **readiness,
             "config": asdict(app.config),
             "active_pair_id": app.config.active_pair_id,
             "pairs": self._build_pairs(),
@@ -189,7 +228,7 @@ class Api:
             email, _ = connect_google()
             self._app.config.google_email = email
             save_config(self._app.config)
-            return {"ok": True, "email": email}
+            return {"ok": True, "email": email, "config": asdict(self._app.config)}
         except (AuthError, Exception) as exc:
             return {"ok": False, "error": str(exc)}
 
@@ -199,7 +238,7 @@ class Api:
         self._app.config.setup_complete = False
         self._app._stop_watcher()
         save_config(self._app.config)
-        return {"ok": True}
+        return {"ok": True, "config": asdict(self._app.config), "pairs": self._build_pairs(), "activity": self._convert_activity(self._app.activity)}
 
     def validate_sheet_url(self, url: str) -> dict:
         try:
@@ -251,26 +290,57 @@ class Api:
 
     def save_settings(self, updates: dict, pair_id: str | None = None) -> dict:
         cfg = self._app.config
-        pair = ensure_pair(cfg, pair_id)
         pair_fields = {
             "name", "excel_path", "sheet_url", "worksheet_name", "match_column",
             "match_mode", "sync_direction", "conflict_resolution", "paused", "pinned",
         }
         app_fields = {"notifications", "minimize_to_tray", "debounce_delay"}
+        has_pair_updates = any(key in pair_fields for key in updates)
+        pair = self._find_pair(pair_id) if has_pair_updates else None
+        if has_pair_updates and pair is None:
+            return {"ok": False, "error": "Pair not found."}
+        allowed_directions = {"Bidirectional", "Excel -> Sheets", "Sheets -> Excel"}
+        allowed_conflicts = {"Excel wins", "Sheets wins"}
         for key, value in updates.items():
-            if key in pair_fields and hasattr(pair, key):
+            if key == "excel_path" and value and not Path(str(value)).exists():
+                return {"ok": False, "error": "The selected Excel workbook no longer exists."}
+            if key == "sheet_url" and value and not sheet_id_from_url(str(value)):
+                return {"ok": False, "error": "Enter a valid Google Sheet URL."}
+            if key == "sync_direction" and value not in allowed_directions:
+                return {"ok": False, "error": "Choose a valid sync direction."}
+            if key == "conflict_resolution" and value not in allowed_conflicts:
+                return {"ok": False, "error": "Choose a valid conflict policy."}
+            if key == "debounce_delay":
+                value = max(0.5, min(30, float(value)))
+            if pair and key in pair_fields and hasattr(pair, key):
                 setattr(pair, key, value)
             elif key in app_fields and hasattr(cfg, key):
                 setattr(cfg, key, value)
-        if "sheet_url" in updates:
+        if pair and "sheet_url" in updates:
             pair.sheet_id = sheet_id_from_url(str(updates["sheet_url"]))
-        sync_legacy_fields(cfg, pair)
+        if pair:
+            sync_legacy_fields(cfg, pair)
         save_config(cfg)
-        self._app._start_watcher()
-        return {"ok": True, "config": asdict(cfg), "pairs": self._build_pairs()}
+        if cfg.setup_complete:
+            self._app._start_watcher()
+        return {"ok": True, "config": asdict(cfg), "pairs": self._build_pairs(), "active_pair_id": cfg.active_pair_id}
 
     def complete_onboarding(self, data: dict) -> dict:
         cfg = self._app.config
+        excel_path = str(data.get("excel_path", "")).strip()
+        sheet_url = str(data.get("sheet_url", "")).strip()
+        if not excel_path:
+            return {"ok": False, "error": "Choose an Excel workbook first."}
+        if not Path(excel_path).exists():
+            return {"ok": False, "error": "The selected Excel workbook no longer exists."}
+        if not sheet_url:
+            return {"ok": False, "error": "Paste a Google Sheet URL first."}
+        if not credentials_configured():
+            return {"ok": False, "error": "Add your OAuth credentials JSON first."}
+        try:
+            metadata = fetch_sheet_metadata(sheet_url)
+        except (AuthError, Exception) as exc:
+            return {"ok": False, "error": str(exc)}
         pair = ensure_pair(cfg)
         field_map = {
             "excel_path": str,
@@ -286,8 +356,10 @@ class Api:
             if key in data:
                 setattr(cfg, key, bool(data[key]))
         pair.name = data.get("name") or pair.name or (Path(pair.excel_path).stem if pair.excel_path else "Main pair")
-        if pair.sheet_url:
-            pair.sheet_id = sheet_id_from_url(pair.sheet_url)
+        pair.sheet_id = str(metadata["sheet_id"])
+        worksheets = metadata.get("worksheets") or []
+        if worksheets and pair.worksheet_name not in worksheets:
+            pair.worksheet_name = str(worksheets[0])
         sync_legacy_fields(cfg, pair)
         cfg.setup_complete = True
         save_config(cfg)
@@ -296,15 +368,27 @@ class Api:
 
     def create_pair(self, data: dict) -> dict:
         cfg = self._app.config
-        excel_path = str(data.get("excel_path", ""))
-        sheet_url = str(data.get("sheet_url", ""))
+        excel_path = str(data.get("excel_path", "")).strip()
+        sheet_url = str(data.get("sheet_url", "")).strip()
+        if not excel_path or not Path(excel_path).exists():
+            return {"ok": False, "error": "Choose an existing Excel workbook."}
+        if not credentials_configured():
+            return {"ok": False, "error": "Add your OAuth credentials JSON first."}
+        try:
+            metadata = fetch_sheet_metadata(sheet_url)
+        except (AuthError, Exception) as exc:
+            return {"ok": False, "error": str(exc)}
+        worksheet_name = str(data.get("worksheet_name", ""))
+        worksheets = metadata.get("worksheets") or []
+        if worksheets and worksheet_name not in worksheets:
+            worksheet_name = str(worksheets[0])
         pair = SyncPairConfig(
             id=pair_id_for(excel_path, sheet_url),
             name=str(data.get("name") or (Path(excel_path).stem if excel_path else "New pair")),
             excel_path=excel_path,
             sheet_url=sheet_url,
-            sheet_id=sheet_id_from_url(sheet_url) if sheet_url else "",
-            worksheet_name=str(data.get("worksheet_name", "")),
+            sheet_id=str(metadata["sheet_id"]),
+            worksheet_name=worksheet_name,
             sync_direction=str(data.get("sync_direction", "Bidirectional")),
             conflict_resolution=str(data.get("conflict_resolution", "Excel wins")),
             pinned=bool(data.get("pinned", True)),
@@ -314,23 +398,29 @@ class Api:
         sync_legacy_fields(cfg, pair)
         save_config(cfg)
         self._app._start_watcher()
-        return {"ok": True, "pair": self._pair_payload(pair), "pairs": self._build_pairs()}
+        return {"ok": True, "pair": self._pair_payload(pair), "pairs": self._build_pairs(), "config": asdict(cfg), "active_pair_id": pair.id}
 
     def set_active_pair(self, pair_id: str) -> dict:
-        pair = ensure_pair(self._app.config, pair_id)
+        pair = self._find_pair(pair_id)
+        if pair is None:
+            return {"ok": False, "error": "Pair not found."}
         self._app.config.active_pair_id = pair.id
         sync_legacy_fields(self._app.config, pair)
         save_config(self._app.config)
         return {"ok": True, "active_pair_id": pair.id, "pairs": self._build_pairs()}
 
     def toggle_pair_pin(self, pair_id: str) -> dict:
-        pair = ensure_pair(self._app.config, pair_id)
+        pair = self._find_pair(pair_id)
+        if pair is None:
+            return {"ok": False, "error": "Pair not found."}
         pair.pinned = not pair.pinned
         save_config(self._app.config)
         return {"ok": True, "pinned": pair.pinned, "pairs": self._build_pairs()}
 
     def toggle_pair_pause(self, pair_id: str) -> dict:
-        pair = ensure_pair(self._app.config, pair_id)
+        pair = self._find_pair(pair_id)
+        if pair is None:
+            return {"ok": False, "error": "Pair not found."}
         pair.paused = not pair.paused
         save_config(self._app.config)
         self._app._start_watcher()
@@ -338,11 +428,22 @@ class Api:
 
     def delete_pair(self, pair_id: str) -> dict:
         cfg = self._app.config
+        if not any(pair.id == pair_id for pair in cfg.pairs):
+            return {"ok": False, "error": "Pair not found."}
         cfg.pairs = [pair for pair in cfg.pairs if pair.id != pair_id]
         if cfg.active_pair_id == pair_id:
             cfg.active_pair_id = cfg.pairs[0].id if cfg.pairs else ""
         if cfg.pairs:
             sync_legacy_fields(cfg, ensure_pair(cfg, cfg.active_pair_id))
+        else:
+            cfg.excel_path = ""
+            cfg.sheet_url = ""
+            cfg.sheet_id = ""
+            cfg.worksheet_name = ""
+            cfg.last_sync_iso = ""
+            cfg.queued_changes = 0
+            cfg.stats = AppConfig().stats
+            cfg.setup_complete = False
         save_config(cfg)
         self._app._start_watcher()
         return {"ok": True, "pairs": self._build_pairs(), "active_pair_id": cfg.active_pair_id}
@@ -351,8 +452,13 @@ class Api:
         self._app._stop_watcher()
         reset_all()
         self._app.config = AppConfig()
+        self._app.engine.config = self._app.config
         self._app.activity = []
-        return {"ok": True}
+        self._app.status = "idle"
+        self._push({"type": "status", "status": self._app.status})
+        self._push({"type": "pairs", "pairs": []})
+        self._push({"type": "activity", "entries": []})
+        return {"ok": True, "config": asdict(self._app.config), "pairs": [], "activity": [], "setup_complete": False, "ready": False}
 
     def export_activity(self) -> dict:
         try:
@@ -366,6 +472,13 @@ class Api:
                 export_activity_csv(path, self._app.activity)
                 return {"ok": True}
             return {"ok": False, "cancelled": True}
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+
+    def open_url(self, url: str) -> dict:
+        try:
+            webbrowser.open(str(url))
+            return {"ok": True}
         except Exception as exc:
             return {"ok": False, "error": str(exc)}
 
