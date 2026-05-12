@@ -21,7 +21,9 @@ assets/oauth_client.json
 build/
 dist/
 *.spec
+!scripts/*.spec
 installer/Output/
+packaging/installer/Output/
 
 # Test builds
 tests/*.exe
@@ -35,3 +37,4 @@ tests/setup/
 Thumbs.db
 .idea/
 .vscode/
+.claude/*.local.json

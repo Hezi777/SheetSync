@@ -11,7 +11,7 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 
-from .storage import ROOT_DIR, TOKEN_PATH
+from .storage import ROOT_DIR, TOKEN_PATH, _restrict_to_current_user
 
 
 SCOPES = [
@@ -96,6 +96,7 @@ def load_credentials() -> Credentials | None:
 
 def save_credentials(creds: Credentials) -> None:
     TOKEN_PATH.write_text(creds.to_json(), encoding="utf-8")
+    _restrict_to_current_user(TOKEN_PATH)
 
 
 def get_credentials(interactive: bool = False) -> Credentials:
