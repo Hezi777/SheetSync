@@ -14,14 +14,14 @@ logger = logging.getLogger(__name__)
 
 
 def app_root() -> Path:
+    appdata = os.environ.get("APPDATA")
+    if appdata:
+        path = Path(appdata) / "SheetSync"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
     if getattr(sys, "frozen", False):
-        appdata = os.environ.get("APPDATA")
-        if appdata:
-            path = Path(appdata) / "SheetSync"
-            path.mkdir(parents=True, exist_ok=True)
-            return path
         return Path(sys.executable).resolve().parent
-    return Path(__file__).resolve().parents[3]
+    return Path.home() / ".sheetsync"
 
 
 APP_DIR = app_root()
