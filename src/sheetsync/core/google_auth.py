@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 import json
 import shutil
-import sys
 from pathlib import Path
 
 import gspread
@@ -17,7 +16,6 @@ from .storage import ROOT_DIR, TOKEN_PATH
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive.metadata.readonly",
     "openid",
     "https://www.googleapis.com/auth/userinfo.email",
 ]
@@ -31,22 +29,14 @@ def credentials_path() -> Path:
     return ROOT_DIR / "credentials.json"
 
 
-def bundled_credentials_path() -> Path:
-    base_dir = Path(getattr(sys, "_MEIPASS", ROOT_DIR))
-    return base_dir / "assets" / "oauth_client.json"
-
-
 def active_credentials_path() -> Path:
-    external = credentials_path()
-    if external.exists():
-        return external
-    return bundled_credentials_path()
+    return credentials_path()
 
 
 def validate_client_config(data: dict) -> None:
-    client = data.get("installed") or data.get("web")
+    client = data.get("installed")
     if not isinstance(client, dict):
-        raise AuthError("Paste or choose a Google OAuth client JSON file, not an API key.")
+        raise AuthError("Choose an OAuth Client ID JSON with application type Desktop app.")
     required = ["client_id", "client_secret", "auth_uri", "token_uri"]
     missing = [key for key in required if not client.get(key)]
     if missing:
@@ -124,7 +114,7 @@ def get_credentials(interactive: bool = False) -> Credentials:
         raise AuthError("Google account is not connected.")
     path = active_credentials_path()
     if not path.exists():
-        raise AuthError("Google OAuth client is missing.")
+        raise AuthError("Choose your own Google OAuth Desktop client JSON before signing in.")
     flow = InstalledAppFlow.from_client_secrets_file(str(path), SCOPES)
     creds = flow.run_local_server(port=0, prompt="consent")
     save_credentials(creds)
@@ -139,8 +129,8 @@ def connect_google() -> tuple[str, gspread.Client]:
     client = get_client(interactive=True)
     email = ""
     try:
-        about = client.http_client.request("get", "https://www.googleapis.com/drive/v3/about?fields=user")
-        email = about.json().get("user", {}).get("emailAddress", "")
+        resp = client.http_client.request("get", "https://openidconnect.googleapis.com/v1/userinfo")
+        email = resp.json().get("email", "")
     except Exception:
         email = "connected-account"
     return email, client
