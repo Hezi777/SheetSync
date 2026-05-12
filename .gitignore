@@ -32,6 +32,16 @@ tests/setup/
 # Playwright MCP scratch files
 .playwright-mcp/
 
+# Node
+node_modules/
+
+# Environment files
+.env
+.env.*
+
+# Logs
+*.log
+
 # OS/editor noise
 .DS_Store
 Thumbs.db
