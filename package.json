@@ -1,0 +1,19 @@
+{
+  "name": "sheetsync-ui",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite src/sheetsync/ui",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "lucide-react": "^0.513.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^6.3.5"
+  }
+}

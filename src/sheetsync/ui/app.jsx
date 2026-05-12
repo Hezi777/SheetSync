@@ -1,3 +1,7 @@
+import React from 'react';
+import * as LucideIcons from 'lucide-react';
+import appIcon from './app_icon.png';
+
 const googleLinks = {
   cloud: "https://console.cloud.google.com/",
   library: "https://console.cloud.google.com/apis/library",
@@ -8,71 +12,6 @@ const googleLinks = {
   revoke: "https://myaccount.google.com/permissions",
 };
 
-const sync = {
-  workbook: "Q2 pipeline.xlsx",
-  excelPath: "C:\\Users\\Hen\\Documents\\Finance\\Q2 pipeline.xlsx",
-  sheetUrl: "https://docs.google.com/spreadsheets/d/1SheetSyncDemo/edit",
-  worksheet: "Pipeline",
-  googleEmail: "hen@example.com",
-  lastSync: "42 seconds ago",
-};
-
-const syncPairs = [
-  {
-    id: "pipeline",
-    name: "Q2 Pipeline",
-    workbook: "Q2 pipeline.xlsx",
-    sheetName: "Q4 Revenue Pipeline",
-    frequency: "on change",
-    excelPath: "C:\\Users\\Hen\\Documents\\Finance\\Q2 pipeline.xlsx",
-    sheetUrl: "https://docs.google.com/spreadsheets/d/1SheetSyncDemo/edit",
-    worksheet: "Pipeline",
-    lastSync: "42 seconds ago",
-    state: "live",
-    pinned: true,
-    rows: 4218,
-    conflicts: 0,
-  },
-  {
-    id: "vendors",
-    name: "Vendor Matrix",
-    workbook: "Vendor matrix.xlsx",
-    sheetName: "Vendor contracts",
-    frequency: "1 min",
-    excelPath: "C:\\Users\\Hen\\Documents\\Ops\\Vendor matrix.xlsx",
-    sheetUrl: "https://docs.google.com/spreadsheets/d/2VendorDemo/edit",
-    worksheet: "Vendors",
-    lastSync: "3 minutes ago",
-    state: "live",
-    pinned: true,
-    rows: 184,
-    conflicts: 0,
-  },
-  {
-    id: "inventory",
-    name: "Inventory Audit",
-    workbook: "Inventory audit.xlsx",
-    sheetName: "Inventory Audit",
-    frequency: "manual",
-    excelPath: "C:\\Users\\Hen\\Documents\\Warehouse\\Inventory audit.xlsx",
-    sheetUrl: "https://docs.google.com/spreadsheets/d/3InventoryDemo/edit",
-    worksheet: "Audit",
-    lastSync: "Paused",
-    state: "idle",
-    pinned: false,
-    rows: 0,
-    conflicts: 1,
-  },
-];
-
-const events = [
-  ["10:42", "check-circle-2", "Synced 214 rows from Excel to Google Sheets", "+214"],
-  ["10:39", "file-spreadsheet", "Detected save in Q2 pipeline.xlsx", ""],
-  ["10:31", "refresh-cw", "Manual sync completed for Pipeline worksheet", "+18"],
-  ["09:58", "triangle-alert", "Conflict resolved with Excel wins", "1"],
-  ["09:12", "key-round", "Google OAuth token refreshed locally", ""],
-];
-
 const onboardingSteps = [
   { title: "OAuth client", label: "Add your Desktop JSON", icon: "key-round" },
   { title: "Google account", label: "Sign in securely", icon: "badge-check" },
@@ -80,11 +19,43 @@ const onboardingSteps = [
   { title: "Sync rules", label: "Confirm behavior", icon: "sliders-horizontal" },
 ];
 
+function getApi() {
+  return window.pywebview?.api;
+}
+
+function fileName(path) {
+  if (!path) return "No workbook selected";
+  return path.split(/[\\/]/).filter(Boolean).pop() || path;
+}
+
+function mapPair(pair) {
+  return {
+    id: pair.id,
+    name: pair.name || fileName(pair.excel) || "Sync pair",
+    workbook: fileName(pair.excel),
+    sheetName: pair.worksheet || pair.sheetId || "Google Sheet",
+    frequency: pair.every || "on change",
+    excelPath: pair.excel || "",
+    sheetUrl: pair.sheet || "",
+    worksheet: pair.worksheet || "Sheet1",
+    lastSync: pair.lastSync || "never",
+    state: pair.state || "idle",
+    pinned: Boolean(pair.pinned),
+    rows: Number(pair.rows || 0),
+    conflicts: Number(pair.conflicts || 0),
+  };
+}
+
+function mapActivity(entry) {
+  const icon = entry.state === "red" ? "triangle-alert" : entry.state === "yellow" ? "shield-alert" : entry.state === "blue" ? "info" : "check-circle-2";
+  return [entry.t || "", icon, entry.msg || "", entry.rows || ""];
+}
+
 function Icon({ name, size = 16 }) {
-  React.useEffect(() => {
-    if (window.lucide) window.lucide.createIcons();
-  });
-  return <i data-lucide={name} style={{ width: size, height: size }} />;
+  const iconName = name.split('-').map(p => p.charAt(0).toUpperCase() + p.slice(1)).join('');
+  const LucideIcon = LucideIcons[iconName];
+  if (!LucideIcon) return null;
+  return <LucideIcon size={size} strokeWidth={1.8} />;
 }
 
 function GoogleG() {
@@ -98,13 +69,7 @@ function GoogleG() {
   );
 }
 
-function useLucide() {
-  React.useEffect(() => {
-    if (window.lucide) window.lucide.createIcons();
-  });
-}
-
-function VerticalNav({ tab, setTab, pairs, activePairId, setActivePairId, theme, setTheme, onNavigate }) {
+function VerticalNav({ tab, setTab, pairs, activePairId, setActivePairId, theme, setTheme, googleEmail, onNavigate }) {
   const menu = [
     ["dashboard", "Dashboard", "layout-dashboard"],
     ["activity", "Activity", "message-square"],
@@ -114,7 +79,7 @@ function VerticalNav({ tab, setTab, pairs, activePairId, setActivePairId, theme,
   return (
     <div className="vertical-nav">
       <div className="brand-block">
-        <div className="brand-mark"><Icon name="table-2" size={14} /></div>
+        <div className="brand-mark"><img src={appIcon} alt="SheetSync" /></div>
         <div>
           <h2>SheetSync</h2>
           <p>Desktop sync</p>
@@ -158,7 +123,7 @@ function VerticalNav({ tab, setTab, pairs, activePairId, setActivePairId, theme,
         <div className="avatar">H</div>
         <div className="avatar-meta">
           <strong>Hen</strong>
-          <span>{sync.googleEmail}</span>
+          <span>{googleEmail || "Not connected"}</span>
         </div>
         <button className="icon-toggle sidebar-theme" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} aria-label="Toggle dark mode">
           <Icon name={theme === "dark" ? "sun" : "moon"} size={15} />
@@ -168,15 +133,15 @@ function VerticalNav({ tab, setTab, pairs, activePairId, setActivePairId, theme,
   );
 }
 
-function Sidebar({ tab, setTab, pairs, activePairId, setActivePairId, theme, setTheme }) {
+function Sidebar({ tab, setTab, pairs, activePairId, setActivePairId, theme, setTheme, googleEmail }) {
   return (
     <aside className="sidebar">
-      <VerticalNav tab={tab} setTab={setTab} pairs={pairs} activePairId={activePairId} setActivePairId={setActivePairId} theme={theme} setTheme={setTheme} />
+      <VerticalNav tab={tab} setTab={setTab} pairs={pairs} activePairId={activePairId} setActivePairId={setActivePairId} theme={theme} setTheme={setTheme} googleEmail={googleEmail} />
     </aside>
   );
 }
 
-function MobileNav({ tab, setTab, pairs, activePairId, setActivePairId, theme, setTheme }) {
+function MobileNav({ tab, setTab, pairs, activePairId, setActivePairId, theme, setTheme, googleEmail }) {
   const [open, setOpen] = React.useState(false);
   return (
     <>
@@ -190,7 +155,7 @@ function MobileNav({ tab, setTab, pairs, activePairId, setActivePairId, theme, s
             <button className="mobile-sheet-close" onClick={() => setOpen(false)} aria-label="Close navigation">
               <Icon name="x" />
             </button>
-            <VerticalNav tab={tab} setTab={setTab} pairs={pairs} activePairId={activePairId} setActivePairId={setActivePairId} theme={theme} setTheme={setTheme} onNavigate={() => setOpen(false)} />
+            <VerticalNav tab={tab} setTab={setTab} pairs={pairs} activePairId={activePairId} setActivePairId={setActivePairId} theme={theme} setTheme={setTheme} googleEmail={googleEmail} onNavigate={() => setOpen(false)} />
           </aside>
         </div>
       )}
@@ -198,7 +163,7 @@ function MobileNav({ tab, setTab, pairs, activePairId, setActivePairId, theme, s
   );
 }
 
-function Topbar() {
+function Topbar({ onAddPair }) {
   const title = "Dashboard";
   return (
     <header className="topbar">
@@ -213,7 +178,7 @@ function Topbar() {
         <input placeholder="Search pairs, files, runs..." />
         <span className="kbd">⌘K</span>
       </div>
-      <button className="btn compact"><Icon name="plus" /> New</button>
+      <button className="btn compact" onClick={onAddPair}><Icon name="plus" /> New</button>
     </header>
   );
 }
@@ -242,10 +207,12 @@ function PairMiniCard({ pair, active, onSelect }) {
   );
 }
 
-function Dashboard({ setTab, pairs, activePairId, setActivePairId }) {
-  const activePair = pairs.find((pair) => pair.id === activePairId) || pairs[0];
+function Dashboard({ setTab, pairs, events, activePairId, setActivePairId, onSyncNow, onTogglePairPause, onChangeWorkbook }) {
+  const activePair = pairs.find((pair) => pair.id === activePairId) || pairs[0] || null;
+  const livePairs = pairs.filter((pair) => pair.state === "live").length;
+  const totalConflicts = pairs.reduce((total, pair) => total + pair.conflicts, 0);
   return (
-    <>
+    <div className="dashboard-page">
       <div className="page-head">
         <div>
           <h1 className="page-title">Dashboard</h1>
@@ -257,20 +224,22 @@ function Dashboard({ setTab, pairs, activePairId, setActivePairId }) {
         <div className="card stat-card primary">
           <div className="card-top">
             <h2 className="card-title">Last sync</h2>
-            <span className="jump"><Icon name="clock-3" /></span>
           </div>
-          <div className="stat-value">{activePair.lastSync === "Paused" ? "--" : "42s"}</div>
-          <div className="stat-foot"><span className="tiny-badge"><Icon name="check" size={12} /> Successful</span> no action needed</div>
+          <div className="stat-value">{activePair && activePair.lastSync !== "never" ? activePair.lastSync : "--"}</div>
+          <div className="stat-foot"><span className="tiny-badge"><Icon name="check" size={12} /> Ready</span>{activePair ? "watching configured pair" : "complete setup to start"}</div>
+          <div className="stat-ghost"><Icon name="clock-3" size={128} /></div>
         </div>
         <div className="card stat-card">
-          <div className="card-top"><h2 className="card-title">Pending changes</h2><span className="jump"><Icon name="inbox" /></span></div>
-          <div className="stat-value">{pairs.filter((pair) => pair.state === "live").length}</div>
+          <div className="card-top"><h2 className="card-title">Pending changes</h2></div>
+          <div className="stat-value">{livePairs}</div>
           <div className="stat-foot">Active watched pairs</div>
+          <div className="stat-ghost"><Icon name="inbox" size={128} /></div>
         </div>
         <div className="card stat-card">
-          <div className="card-top"><h2 className="card-title">Conflicts</h2><span className="jump"><Icon name="git-merge" /></span></div>
-          <div className="stat-value">{pairs.reduce((total, pair) => total + pair.conflicts, 0)}</div>
+          <div className="card-top"><h2 className="card-title">Conflicts</h2></div>
+          <div className="stat-value">{totalConflicts}</div>
           <div className="stat-foot"><span className="tiny-badge"><Icon name="shield-check" size={12} /> Excel wins</span> current policy</div>
+          <div className="stat-ghost"><Icon name="git-merge" size={128} /></div>
         </div>
       </section>
 
@@ -284,12 +253,13 @@ function Dashboard({ setTab, pairs, activePairId, setActivePairId }) {
         </div>
 
         <div className="sync-pair-strip">
+          {pairs.length === 0 && <div className="empty-state">No sync pairs yet. Finish onboarding to connect an Excel workbook and Google Sheet.</div>}
           {pairs.map((pair) => (
             <PairMiniCard key={pair.id} pair={pair} active={pair.id === activePair.id} onSelect={() => setActivePairId(pair.id)} />
           ))}
         </div>
 
-        <div className="sync-detail-panel">
+        {activePair && <div className="sync-detail-panel">
           <div className="card-top">
             <div><h2 className="card-title">{activePair.name}</h2><p className="card-sub">Selected active pair</p></div>
             <span className="tiny-badge"><Icon name="repeat-2" size={12} /> Bidirectional</span>
@@ -306,17 +276,18 @@ function Dashboard({ setTab, pairs, activePairId, setActivePairId }) {
             </div>
           </div>
           <div className="control-row">
-            <button className="btn primary"><Icon name="refresh-cw" /> Sync now</button>
-            <button className="btn"><Icon name="pause" /> Pause watching</button>
-            <button className="btn"><Icon name="folder-open" /> Change workbook</button>
+            <button className="btn primary" onClick={() => onSyncNow(activePair.id)}><Icon name="refresh-cw" /> Sync now</button>
+            <button className="btn" onClick={() => onTogglePairPause(activePair.id)}><Icon name={activePair.state === "idle" ? "play" : "pause"} /> {activePair.state === "idle" ? "Resume watching" : "Pause watching"}</button>
+            <button className="btn" onClick={() => onChangeWorkbook(activePair.id)}><Icon name="folder-open" /> Change workbook</button>
           </div>
-        </div>
+        </div>}
       </section>
 
       <section className="lower-grid single-row">
         <div className="card activity-card">
-          <div className="card-top"><h2 className="card-title">Recent activity</h2><button className="btn" style={{ height: 32, padding: "0 10px" }}>View all</button></div>
+          <div className="card-top"><h2 className="card-title">Recent activity</h2><button className="btn" style={{ height: 32, padding: "0 10px" }} onClick={() => setTab("activity")}>View all</button></div>
           <div className="project-list">
+            {events.length === 0 && <div className="empty-state compact">No activity yet.</div>}
             {events.slice(0, 3).map(([time, icon, text, rows]) => (
               <div className="project-row" key={time + text}>
                 <div className="project-logo" style={{ background: "#168451" }}><Icon name={icon} size={15} /></div>
@@ -326,22 +297,65 @@ function Dashboard({ setTab, pairs, activePairId, setActivePairId }) {
           </div>
         </div>
       </section>
-    </>
+    </div>
   );
 }
 
-function Onboarding({ onClose }) {
+function Onboarding({ mode = "setup", onComplete }) {
   const [step, setStep] = React.useState(0);
-  const data = onboardingSteps[step];
+  const [formData, setFormData] = React.useState({
+    excel_path: "",
+    sheet_url: "",
+    worksheet_name: "Sheet1",
+    sync_direction: "Bidirectional",
+    conflict_resolution: "Excel wins",
+  });
+  const [message, setMessage] = React.useState("");
+  const isCreateMode = mode === "create";
+  const update = (patch) => setFormData((current) => ({ ...current, ...patch }));
+  const callApi = async (name, ...args) => {
+    const bridge = getApi();
+    if (!bridge?.[name]) {
+      setMessage("Desktop bridge is not ready yet.");
+      return null;
+    }
+    const result = await bridge[name](...args);
+    if (result && result.ok === false && !result.cancelled) setMessage(result.error || "Action failed.");
+    else setMessage("");
+    return result;
+  };
+  const finish = async () => {
+    const result = await callApi(isCreateMode ? "create_pair" : "complete_onboarding", formData);
+    if (result?.ok) onComplete(result);
+  };
+  const continueNext = async () => {
+    if (step !== 2) {
+      setStep(step + 1);
+      return;
+    }
+    if (!formData.excel_path) {
+      setMessage("Choose an Excel workbook first.");
+      return;
+    }
+    if (!formData.sheet_url) {
+      setMessage("Paste a Google Sheet URL first.");
+      return;
+    }
+    const result = await callApi("validate_sheet_url", formData.sheet_url);
+    if (!result?.ok) return;
+    const firstWorksheet = result.worksheets?.[0];
+    if (firstWorksheet && !formData.worksheet_name) update({ worksheet_name: firstWorksheet });
+    setStep(step + 1);
+  };
   return (
     <div className="overlay">
       <section className="glass-onboarding">
-        <button className="overlay-close" onClick={onClose}><Icon name="x" /></button>
+        {isCreateMode && <button className="overlay-close" onClick={() => onComplete(null)} aria-label="Close add pair"><Icon name="x" /></button>}
         <div className="overlay-head">
           <div>
-            <span className="tiny-badge"><GoogleG /> First launch</span>
-            <h2>Set up SheetSync</h2>
-            <p>{data.label}</p>
+            <span className="tiny-badge"><GoogleG /> {isCreateMode ? "New pair" : "First launch"}</span>
+            <h2>{isCreateMode ? "Add Sync Pair" : "Set up SheetSync"}</h2>
+            <p>{onboardingSteps[step].label}</p>
           </div>
           <span className="pill">Step {step + 1} of {onboardingSteps.length}</span>
         </div>
@@ -356,16 +370,17 @@ function Onboarding({ onClose }) {
         </div>
 
         <div className="overlay-body">
-          {step === 0 && <OAuthStep />}
-          {step === 1 && <GoogleStep />}
-          {step === 2 && <FilesStep />}
-          {step === 3 && <RulesStep />}
+          {step === 0 && <OAuthStep callApi={callApi} />}
+          {step === 1 && <GoogleStep callApi={callApi} />}
+          {step === 2 && <FilesStep data={formData} update={update} callApi={callApi} />}
+          {step === 3 && <RulesStep data={formData} update={update} />}
+          {message && <p className="form-error">{message}</p>}
         </div>
 
         <div className="overlay-actions">
           <button className="btn" disabled={step === 0} onClick={() => setStep(step - 1)}><Icon name="arrow-left" /> Back</button>
-          <button className="btn primary" onClick={() => step === onboardingSteps.length - 1 ? onClose() : setStep(step + 1)}>
-            {step === onboardingSteps.length - 1 ? "Finish setup" : "Continue"} <Icon name="arrow-right" />
+          <button className="btn primary" onClick={() => step === onboardingSteps.length - 1 ? finish() : continueNext()}>
+            {step === onboardingSteps.length - 1 ? (isCreateMode ? "Add pair" : "Finish setup") : "Continue"} <Icon name="arrow-right" />
           </button>
         </div>
       </section>
@@ -373,7 +388,8 @@ function Onboarding({ onClose }) {
   );
 }
 
-function OAuthStep() {
+function OAuthStep({ callApi }) {
+  const open = (url) => callApi("open_url", url);
   return (
     <div className="simple-step">
       <Icon name="key-round" size={30} />
@@ -385,63 +401,69 @@ function OAuthStep() {
         <li>Create OAuth Client ID, choose Desktop app, download JSON.</li>
       </ol>
       <div className="compact-links">
-        <a href={googleLinks.cloud} target="_blank" rel="noreferrer"><GoogleG /> Cloud Console</a>
-        <a href={googleLinks.sheetsApi} target="_blank" rel="noreferrer">Sheets API</a>
-        <a href={googleLinks.driveApi} target="_blank" rel="noreferrer">Drive API</a>
-        <a href={googleLinks.credentials} target="_blank" rel="noreferrer">Credentials</a>
+        <button type="button" onClick={() => open(googleLinks.cloud)}><GoogleG /> Cloud Console</button>
+        <button type="button" onClick={() => open(googleLinks.sheetsApi)}>Sheets API</button>
+        <button type="button" onClick={() => open(googleLinks.driveApi)}>Drive API</button>
+        <button type="button" onClick={() => open(googleLinks.credentials)}>Credentials</button>
       </div>
       <div className="field">
         <label>OAuth Desktop client JSON</label>
-        <div className="file-drop"><Icon name="upload" /> Choose credentials.json</div>
+        <button className="file-drop" type="button" onClick={() => callApi("pick_credentials_file")}><Icon name="upload" /> Choose credentials.json</button>
       </div>
     </div>
   );
 }
 
-function GoogleStep() {
+function GoogleStep({ callApi }) {
   return (
     <div className="simple-step">
       <GoogleG />
       <h3>Connect Google</h3>
       <p>After the JSON is added, SheetSync opens the Google OAuth screen in your browser and stores the token locally on this PC.</p>
-      <button className="btn google"><GoogleG /> Sign in with Google</button>
-      <p className="fine-print">This app requests access to all your Google Sheets in order to sync the sheet you select. You can revoke access later from <a href={googleLinks.revoke} target="_blank" rel="noreferrer">Google Account permissions</a>.</p>
+      <button className="btn google" onClick={() => callApi("connect_google")}><GoogleG /> Sign in with Google</button>
+      <p className="fine-print">This app requests access to all your Google Sheets in order to sync the sheet you select. You can revoke access later from <button className="text-link" type="button" onClick={() => callApi("open_url", googleLinks.revoke)}>Google Account permissions</button>.</p>
     </div>
   );
 }
 
-function FilesStep() {
+function FilesStep({ data, update, callApi }) {
+  const pickWorkbook = async () => {
+    const result = await callApi("pick_excel_file");
+    if (result?.ok) update({ excel_path: result.path, name: fileName(result.path) });
+  };
   return (
     <div className="simple-step">
       <Icon name="folder-open" size={30} />
       <h3>Choose your files</h3>
       <p>Select one local Excel workbook and paste the Google Sheet URL it should sync with.</p>
-      <div className="field"><label>Excel workbook</label><div className="file-drop"><Icon name="file-spreadsheet" /> Q2 pipeline.xlsx</div></div>
-      <div className="field"><label>Google Sheet URL</label><input className="input" value={sync.sheetUrl} readOnly /></div>
+      <div className="field"><label>Excel workbook</label><button className="file-drop" type="button" onClick={pickWorkbook}><Icon name="file-spreadsheet" /> {data.excel_path ? fileName(data.excel_path) : "Choose workbook"}</button></div>
+      <div className="field"><label>Google Sheet URL</label><input className="input" value={data.sheet_url} onChange={(event) => update({ sheet_url: event.target.value })} placeholder="https://docs.google.com/spreadsheets/d/..." /></div>
+      <div className="field"><label>Worksheet</label><input className="input" value={data.worksheet_name} onChange={(event) => update({ worksheet_name: event.target.value })} placeholder="Sheet1" /></div>
     </div>
   );
 }
 
-function RulesStep() {
+function RulesStep({ data, update }) {
   return (
     <div className="simple-step">
       <Icon name="sliders-horizontal" size={30} />
       <h3>Confirm sync rules</h3>
       <p>Keep the first setup conservative. You can change these later in Settings.</p>
-      <div className="field"><label>Direction</label><select className="select" defaultValue="Bidirectional"><option>Bidirectional</option><option>Excel -> Sheets</option><option>Sheets -> Excel</option></select></div>
-      <div className="field"><label>Conflict policy</label><select className="select" defaultValue="Excel wins"><option>Excel wins</option><option>Sheets wins</option></select></div>
+      <div className="field"><label>Direction</label><select className="select" value={data.sync_direction} onChange={(event) => update({ sync_direction: event.target.value })}><option>Bidirectional</option><option>Excel -&gt; Sheets</option><option>Sheets -&gt; Excel</option></select></div>
+      <div className="field"><label>Conflict policy</label><select className="select" value={data.conflict_resolution} onChange={(event) => update({ conflict_resolution: event.target.value })}><option>Excel wins</option><option>Sheets wins</option></select></div>
     </div>
   );
 }
 
-function Activity() {
+function Activity({ events }) {
   return (
     <>
       <div className="page-head">
-        <div><h1 className="page-title">Activity</h1><div className="page-sub">Mock run log for sync, auth, and watcher events.</div></div>
+        <div><h1 className="page-title">Activity</h1><div className="page-sub">Sync, auth, and watcher events.</div></div>
       </div>
       <div className="card">
         <div className="project-list">
+          {events.length === 0 && <div className="empty-state compact">No activity yet.</div>}
           {events.map(([time, icon, text, rows]) => (
             <div className="project-row" key={time + text}>
               <div className="project-logo" style={{ background: "#168451" }}><Icon name={icon} size={15} /></div>
@@ -454,14 +476,48 @@ function Activity() {
   );
 }
 
-function Settings({ pairs, activePairId, setActivePairId }) {
-  const activePair = pairs.find((pair) => pair.id === activePairId) || pairs[0];
+function Settings({
+  pairs,
+  activePairId,
+  setActivePairId,
+  googleEmail,
+  config,
+  onAddPair,
+  onSavePair,
+  onTogglePairPause,
+  onTogglePairPin,
+  onDeletePair,
+  onPickCredentials,
+  onDisconnect,
+  onSaveAppSettings,
+}) {
+  const activePair = pairs.find((pair) => pair.id === activePairId) || pairs[0] || null;
+  const [pairDraft, setPairDraft] = React.useState({});
+  const [appDraft, setAppDraft] = React.useState({});
+  React.useEffect(() => {
+    if (!activePair) return;
+    setPairDraft({
+      name: activePair.name || "",
+      worksheet_name: activePair.worksheet || "",
+      excel_path: activePair.excelPath || "",
+      sheet_url: activePair.sheetUrl || "",
+      sync_direction: config?.sync_direction || "Bidirectional",
+      conflict_resolution: config?.conflict_resolution || "Excel wins",
+    });
+  }, [activePair, config]);
+  React.useEffect(() => {
+    setAppDraft({
+      notifications: config?.notifications ?? true,
+      minimize_to_tray: config?.minimize_to_tray ?? true,
+      debounce_delay: String(config?.debounce_delay ?? 1.5),
+    });
+  }, [config]);
   return (
     <>
       <div className="page-head">
         <div><h1 className="page-title">Settings</h1><div className="page-sub">Manage sync pairs, Google access, and desktop behavior.</div></div>
         <div className="head-actions">
-          <button className="btn primary"><Icon name="plus" /> Add pair</button>
+          <button className="btn primary" onClick={onAddPair}><Icon name="plus" /> Add pair</button>
         </div>
       </div>
 
@@ -469,6 +525,7 @@ function Settings({ pairs, activePairId, setActivePairId }) {
         <div className="card settings-pairs">
           <div className="section-head"><h2>Sync pairs</h2><span className="count-pill">{pairs.length}</span></div>
           <div className="settings-pair-list">
+            {pairs.length === 0 && <div className="empty-state compact">No sync pairs configured.</div>}
             {pairs.map((pair) => (
               <button key={pair.id} className={`settings-pair ${pair.id === activePair.id ? "active" : ""}`} onClick={() => setActivePairId(pair.id)}>
                 <span className={`state-dot ${pair.state}`} />
@@ -483,43 +540,47 @@ function Settings({ pairs, activePairId, setActivePairId }) {
         </div>
 
         <div className="settings-main">
+          {!activePair && <div className="card"><div className="empty-state compact">Finish onboarding to configure your first sync pair.</div></div>}
+          {activePair && <>
           <div className="card">
             <div className="card-top">
               <div><h2 className="card-title">{activePair.name}</h2><p className="card-sub">Pair-specific file, Sheet, and sync behavior.</p></div>
               <span className={`state-pill ${activePair.state}`}><span />{activePair.state === "idle" ? "Paused" : "Live"}</span>
             </div>
             <div className="settings-form-grid">
-              <div className="field"><label>Pair name</label><input className="input" readOnly value={activePair.name} /></div>
-              <div className="field"><label>Worksheet</label><input className="input" readOnly value={activePair.worksheet} /></div>
-              <div className="field wide-field"><label>Excel workbook</label><div className="file-drop"><Icon name="file-spreadsheet" /> {activePair.excelPath}</div></div>
-              <div className="field wide-field"><label>Google Sheet URL</label><input className="input" readOnly value={activePair.sheetUrl} /></div>
-              <div className="field"><label>Sync direction</label><select className="select" defaultValue="Bidirectional"><option>Bidirectional</option><option>Excel -> Sheets</option><option>Sheets -> Excel</option></select></div>
-              <div className="field"><label>Conflict policy</label><select className="select" defaultValue="Excel wins"><option>Excel wins</option><option>Sheets wins</option></select></div>
+              <div className="field"><label>Pair name</label><input className="input" value={pairDraft.name || ""} onChange={(event) => setPairDraft({ ...pairDraft, name: event.target.value })} /></div>
+              <div className="field"><label>Worksheet</label><input className="input" value={pairDraft.worksheet_name || ""} onChange={(event) => setPairDraft({ ...pairDraft, worksheet_name: event.target.value })} /></div>
+              <div className="field wide-field"><label>Excel workbook</label><input className="input" value={pairDraft.excel_path || ""} onChange={(event) => setPairDraft({ ...pairDraft, excel_path: event.target.value })} /></div>
+              <div className="field wide-field"><label>Google Sheet URL</label><input className="input" value={pairDraft.sheet_url || ""} onChange={(event) => setPairDraft({ ...pairDraft, sheet_url: event.target.value })} /></div>
+              <div className="field"><label>Sync direction</label><select className="select" value={pairDraft.sync_direction || "Bidirectional"} onChange={(event) => setPairDraft({ ...pairDraft, sync_direction: event.target.value })}><option>Bidirectional</option><option>Excel -&gt; Sheets</option><option>Sheets -&gt; Excel</option></select></div>
+              <div className="field"><label>Conflict policy</label><select className="select" value={pairDraft.conflict_resolution || "Excel wins"} onChange={(event) => setPairDraft({ ...pairDraft, conflict_resolution: event.target.value })}><option>Excel wins</option><option>Sheets wins</option></select></div>
             </div>
             <div className="control-row">
-              <button className="btn primary"><Icon name="save" /> Save pair</button>
-              <button className="btn"><Icon name="pause" /> Pause pair</button>
-              <button className="btn"><Icon name="pin" /> Toggle pin</button>
-              <button className="btn danger"><Icon name="trash-2" /> Remove</button>
+              <button className="btn primary" onClick={() => onSavePair(activePair.id, pairDraft)}><Icon name="save" /> Save pair</button>
+              <button className="btn" onClick={() => onTogglePairPause(activePair.id)}><Icon name={activePair.state === "idle" ? "play" : "pause"} /> {activePair.state === "idle" ? "Resume pair" : "Pause pair"}</button>
+              <button className="btn" onClick={() => onTogglePairPin(activePair.id)}><Icon name="pin" /> {activePair.pinned ? "Unpin" : "Pin"}</button>
+              <button className="btn danger" onClick={() => onDeletePair(activePair.id)}><Icon name="trash-2" /> Remove</button>
             </div>
           </div>
+          </>}
 
           <div className="settings-two-col">
             <div className="card">
               <h2 className="card-title">Google access</h2>
               <p className="card-sub">SheetSync uses your own Google Cloud Desktop OAuth client.</p>
-              <div className="settings-status-row"><GoogleG /><div><strong>{sync.googleEmail}</strong><span>Connected locally on this PC</span></div></div>
+              <div className="settings-status-row"><GoogleG /><div><strong>{googleEmail || "Not connected"}</strong><span>{googleEmail ? "Connected locally on this PC" : "Complete Google sign-in during onboarding"}</span></div></div>
               <div className="control-row">
-                <button className="btn google"><GoogleG /> Replace JSON</button>
-                <button className="btn"><Icon name="log-out" /> Disconnect</button>
+                <button className="btn google" onClick={onPickCredentials}><GoogleG /> Replace JSON</button>
+                <button className="btn" onClick={onDisconnect}><Icon name="log-out" /> Disconnect</button>
               </div>
             </div>
 
             <div className="card">
               <h2 className="card-title">App behavior</h2>
-              <div className="settings-toggle-row"><div><strong>Notifications</strong><span>Show desktop sync results</span></div><span className="switch on" /></div>
-              <div className="settings-toggle-row"><div><strong>Minimize to tray</strong><span>Keep watchers running when closed</span></div><span className="switch on" /></div>
-              <div className="field"><label>Watcher debounce</label><select className="select" defaultValue="1.5 seconds"><option>1.5 seconds</option><option>3 seconds</option><option>5 seconds</option></select></div>
+              <button className="settings-toggle-row" onClick={() => setAppDraft({ ...appDraft, notifications: !appDraft.notifications })}><div><strong>Notifications</strong><span>Show desktop sync results</span></div><span className={`switch ${appDraft.notifications ? "on" : ""}`} /></button>
+              <button className="settings-toggle-row" onClick={() => setAppDraft({ ...appDraft, minimize_to_tray: !appDraft.minimize_to_tray })}><div><strong>Minimize to tray</strong><span>Keep watchers running when closed</span></div><span className={`switch ${appDraft.minimize_to_tray ? "on" : ""}`} /></button>
+              <div className="field"><label>Watcher debounce</label><select className="select" value={appDraft.debounce_delay || "1.5"} onChange={(event) => setAppDraft({ ...appDraft, debounce_delay: event.target.value })}><option value="1.5">1.5 seconds</option><option value="3">3 seconds</option><option value="5">5 seconds</option></select></div>
+              <button className="btn primary" onClick={() => onSaveAppSettings(appDraft)}><Icon name="save" /> Save behavior</button>
             </div>
           </div>
         </div>
@@ -529,31 +590,168 @@ function Settings({ pairs, activePairId, setActivePairId }) {
 }
 
 function App() {
-  useLucide();
   const [tab, setTab] = React.useState("dashboard");
   const [showOnboarding, setShowOnboarding] = React.useState(true);
-  const [theme, setTheme] = React.useState("light");
-  const [activePairId, setActivePairId] = React.useState(syncPairs[0].id);
+  const [onboardingMode, setOnboardingMode] = React.useState("setup");
+  const [theme, setTheme] = React.useState("dark");
+  const [pairs, setPairs] = React.useState([]);
+  const [events, setEvents] = React.useState([]);
+  const [googleEmail, setGoogleEmail] = React.useState("");
+  const [config, setConfig] = React.useState({});
+  const [activePairId, setActivePairId] = React.useState("");
+
+  const applyInitialData = React.useCallback((payload) => {
+    const nextPairs = (payload?.pairs || []).map(mapPair);
+    const nextEvents = (payload?.activity || []).map(mapActivity);
+    setPairs(nextPairs);
+    setEvents(nextEvents);
+    setConfig(payload?.config || {});
+    setGoogleEmail(payload?.config?.google_email || "");
+    setActivePairId(payload?.active_pair_id || nextPairs[0]?.id || "");
+    setShowOnboarding(!(payload?.setup_complete && payload?.ready !== false));
+  }, []);
+
+  const refresh = React.useCallback(async () => {
+    const payload = await getApi()?.get_initial_data?.();
+    if (payload) applyInitialData(payload);
+    return payload;
+  }, [applyInitialData]);
+
+  const applyPairsResult = React.useCallback((result) => {
+    if (!result?.ok) return;
+    if (result.pairs) setPairs(result.pairs.map(mapPair));
+    if (result.config) {
+      setConfig(result.config);
+      setGoogleEmail(result.config.google_email || "");
+    }
+    if (result.active_pair_id !== undefined) setActivePairId(result.active_pair_id || "");
+    else if (result.pair?.id) setActivePairId(result.pair.id);
+  }, []);
+
+  const selectPair = React.useCallback(async (pairId) => {
+    const result = await getApi()?.set_active_pair?.(pairId);
+    if (result?.ok) applyPairsResult(result);
+    else setActivePairId(pairId);
+  }, [applyPairsResult]);
+
+  const syncNow = React.useCallback(async (pairId) => {
+    await getApi()?.sync_now?.(pairId);
+  }, []);
+
+  const togglePairPause = React.useCallback(async (pairId) => {
+    const result = await getApi()?.toggle_pair_pause?.(pairId);
+    if (result?.ok) applyPairsResult(result);
+  }, [applyPairsResult]);
+
+  const changeWorkbook = React.useCallback(async (pairId) => {
+    const picked = await getApi()?.pick_excel_file?.();
+    if (!picked?.ok) return;
+    const result = await getApi()?.save_settings?.({ excel_path: picked.path, name: fileName(picked.path) }, pairId);
+    if (result?.ok) applyPairsResult(result);
+  }, [applyPairsResult]);
+
+  const savePair = React.useCallback(async (pairId, updates) => {
+    const result = await getApi()?.save_settings?.(updates, pairId);
+    if (result?.ok) applyPairsResult(result);
+  }, [applyPairsResult]);
+
+  const togglePairPin = React.useCallback(async (pairId) => {
+    const result = await getApi()?.toggle_pair_pin?.(pairId);
+    if (result?.ok) applyPairsResult(result);
+  }, [applyPairsResult]);
+
+  const deletePair = React.useCallback(async (pairId) => {
+    const result = await getApi()?.delete_pair?.(pairId);
+    if (result?.ok) {
+      applyPairsResult(result);
+      if (!result.pairs?.length) {
+        setOnboardingMode("setup");
+        setShowOnboarding(true);
+      }
+    }
+  }, [applyPairsResult]);
+
+  const pickCredentials = React.useCallback(async () => {
+    const result = await getApi()?.pick_credentials_file?.();
+    if (result?.ok) await refresh();
+  }, [refresh]);
+
+  const disconnectAndReset = React.useCallback(async () => {
+    const result = await getApi()?.reset_all?.();
+    if (result?.ok) {
+      applyInitialData(result);
+      setOnboardingMode("setup");
+      setShowOnboarding(true);
+      setTab("dashboard");
+    }
+  }, [applyInitialData]);
+
+  const saveAppSettings = React.useCallback(async (updates) => {
+    const result = await getApi()?.save_settings?.({
+      notifications: Boolean(updates.notifications),
+      minimize_to_tray: Boolean(updates.minimize_to_tray),
+      debounce_delay: Number(updates.debounce_delay || 1.5),
+    }, activePairId || null);
+    if (result?.ok) applyPairsResult(result);
+  }, [activePairId, applyPairsResult]);
+
+  const openAddPair = React.useCallback(() => {
+    setOnboardingMode(pairs.length ? "create" : "setup");
+    setShowOnboarding(true);
+  }, [pairs.length]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      const bridge = getApi();
+      if (!bridge?.get_initial_data) {
+        window.setTimeout(load, 100);
+        return;
+      }
+      const payload = await bridge.get_initial_data();
+      if (!cancelled) applyInitialData(payload);
+    };
+    load();
+    window.__ss_event = (event) => {
+      if (event.type === "pairs") setPairs((event.pairs || []).map(mapPair));
+      if (event.type === "activity") setEvents((event.entries || []).map(mapActivity));
+      if (event.type === "status") {
+        // Reserved for future status chrome.
+      }
+    };
+    return () => {
+      cancelled = true;
+      window.__ss_event = null;
+    };
+  }, [applyInitialData]);
+
   React.useEffect(() => {
     document.body.dataset.theme = theme;
   }, [theme]);
   return (
     <>
       <div className="frame">
-        <MobileNav tab={tab} setTab={setTab} pairs={syncPairs} activePairId={activePairId} setActivePairId={setActivePairId} theme={theme} setTheme={setTheme} />
-        <Sidebar tab={tab} setTab={setTab} pairs={syncPairs} activePairId={activePairId} setActivePairId={setActivePairId} theme={theme} setTheme={setTheme} />
+        <MobileNav tab={tab} setTab={setTab} pairs={pairs} activePairId={activePairId} setActivePairId={selectPair} theme={theme} setTheme={setTheme} googleEmail={googleEmail} />
+        <Sidebar tab={tab} setTab={setTab} pairs={pairs} activePairId={activePairId} setActivePairId={selectPair} theme={theme} setTheme={setTheme} googleEmail={googleEmail} />
         <main className="workspace">
-          <Topbar />
+          <Topbar onAddPair={openAddPair} />
           <section className="content">
-            {tab === "dashboard" && <Dashboard setTab={setTab} pairs={syncPairs} activePairId={activePairId} setActivePairId={setActivePairId} />}
-            {tab === "activity" && <Activity />}
-            {tab === "settings" && <Settings pairs={syncPairs} activePairId={activePairId} setActivePairId={setActivePairId} />}
+            {tab === "dashboard" && <Dashboard setTab={setTab} pairs={pairs} events={events} activePairId={activePairId} setActivePairId={selectPair} onSyncNow={syncNow} onTogglePairPause={togglePairPause} onChangeWorkbook={changeWorkbook} />}
+            {tab === "activity" && <Activity events={events} />}
+            {tab === "settings" && <Settings pairs={pairs} activePairId={activePairId} setActivePairId={selectPair} googleEmail={googleEmail} config={config} onAddPair={openAddPair} onSavePair={savePair} onTogglePairPause={togglePairPause} onTogglePairPin={togglePairPin} onDeletePair={deletePair} onPickCredentials={pickCredentials} onDisconnect={disconnectAndReset} onSaveAppSettings={saveAppSettings} />}
           </section>
         </main>
       </div>
-      {showOnboarding && <Onboarding onClose={() => setShowOnboarding(false)} />}
+      {showOnboarding && <Onboarding mode={onboardingMode} onComplete={async (result) => {
+        if (!result?.ok) {
+          if (onboardingMode === "create") setShowOnboarding(false);
+          return;
+        }
+        await refresh();
+        setShowOnboarding(false);
+      }} />}
     </>
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+export default App;
