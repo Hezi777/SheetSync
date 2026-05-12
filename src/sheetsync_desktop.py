@@ -15,10 +15,10 @@ from sheetsync.core.watcher import ExcelWatcher
 
 
 def _app_base() -> Path:
-    """Root directory — works both in dev and in a PyInstaller bundle."""
+    """UI resource directory for dev and PyInstaller builds."""
     if getattr(sys, "frozen", False):
-        return Path(sys._MEIPASS)  # type: ignore[attr-defined]
-    return Path(__file__).resolve().parent
+        return Path(sys._MEIPASS) / "sheetsync" / "ui"  # type: ignore[attr-defined]
+    return Path(__file__).resolve().parent / "sheetsync" / "ui"
 
 
 APP_BASE = _app_base()
@@ -29,7 +29,7 @@ class SheetSyncApp:
         self.config: AppConfig = load_config()
         self.activity: list[dict] = load_activity()
         self.status: str = "idle" if self.config.paused else "watching"
-        self.watcher: ExcelWatcher | None = None
+        self.watchers: dict[str, ExcelWatcher] = {}
         self.engine = SyncEngine(self.config, self._on_engine_event)
         self.api = Api(self)
         self.tray = TrayController(
@@ -65,25 +65,33 @@ class SheetSyncApp:
     # ── watcher ───────────────────────────────────────────────────────────────
 
     def _start_watcher(self) -> None:
+        self._start_watchers()
+
+    def _start_watchers(self) -> None:
         self._stop_watcher()
-        if self.config.paused or not self.config.excel_path:
+        if self.config.paused:
             return
-        try:
-            self.watcher = ExcelWatcher(
-                self.config.excel_path,
-                self.config.debounce_delay,
-                lambda: self.api._run_sync("Excel"),
-            )
-            self.watcher.start()
+        for pair in self.config.pairs:
+            if pair.paused or not pair.excel_path:
+                continue
+            try:
+                watcher = ExcelWatcher(
+                    pair.excel_path,
+                    self.config.debounce_delay,
+                    lambda pair_id=pair.id: self.api._run_sync("Excel", pair_id),
+                )
+                watcher.start()
+                self.watchers[pair.id] = watcher
+            except FileNotFoundError:
+                self.status = "error"
+                self._add_activity("error", f"Excel file not found for {pair.name}. Update the path in Settings.", "")
+        if self.watchers:
             self.status = "watching"
-        except FileNotFoundError:
-            self.status = "error"
-            self._add_activity("error", "Excel file not found. Update the path in Settings.", "")
 
     def _stop_watcher(self) -> None:
-        if self.watcher:
-            self.watcher.stop()
-            self.watcher = None
+        for watcher in self.watchers.values():
+            watcher.stop()
+        self.watchers = {}
 
     def _on_engine_event(self, event: dict) -> None:
         if event.get("state"):
@@ -147,7 +155,7 @@ def main() -> None:
     window.events.closing += on_closing
     window.events.resized += on_resized
 
-    webview.start(debug=False, private_mode=False)
+    webview.start(debug=False, private_mode=True)
 
 
 if __name__ == "__main__":
