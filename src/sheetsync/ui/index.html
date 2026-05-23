@@ -643,6 +643,10 @@
       place-items: center;
       color: #fff;
     }
+    .activity-icon.ok { background: rgba(22,132,81,.88); color: #fff; }
+    .activity-icon.red { background: rgba(255,97,97,.22); color: var(--error); }
+    .activity-icon.yellow { background: rgba(255,197,51,.22); color: var(--yellow); }
+    .activity-icon.blue { background: rgba(87,193,255,.22); color: #57c1ff; }
     .project-row strong { display: block; font-size: 13px; }
     .project-row span { display: block; color: var(--stone); font-size: 11px; margin-top: 2px; }
     .section-head {
@@ -795,7 +799,9 @@
       flex-shrink: 0;
     }
     .state-dot.live { background: var(--green); box-shadow: 0 0 8px rgba(22,132,81,.55); }
-    .state-dot.idle { background: var(--yellow); }
+    .state-dot.idle { background: var(--stone); }
+    .state-dot.syncing { background: var(--yellow); box-shadow: 0 0 8px rgba(255,197,51,.45); }
+    .state-dot.error { background: var(--error); box-shadow: 0 0 8px rgba(255,97,97,.45); }
     .pair-row-stats {
       margin-top: 12px;
       display: grid;
@@ -1182,6 +1188,39 @@
     .check-list { display: flex; flex-direction: column; gap: 11px; margin-top: 16px; }
     .check-item { display: flex; align-items: center; gap: 8px; font-size: 13px; color: rgba(255,255,255,.84); }
     .google-g { width: 18px; height: 18px; flex-shrink: 0; }
+
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 100;
+      height: 36px;
+      border-radius: 8px;
+      border: 1px solid var(--hairline);
+      background: var(--surface);
+      color: var(--ink);
+      padding: 0 14px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      box-shadow: 0 8px 24px rgba(0,0,0,.28);
+      animation: toast-in 200ms ease;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+    @keyframes toast-in {
+      from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+      to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+    .toast-ok .lucide { color: var(--teal); }
+    .toast-error .lucide { color: var(--error); }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { display: inline-flex; animation: spin 900ms linear infinite; }
+    .loading-row { display: flex; align-items: center; gap: 8px; }
 
     @media (max-width: 1120px) {
       body { overflow: auto; }

@@ -19,6 +19,43 @@ const onboardingSteps = [
   { title: "Sync rules", label: "Confirm behavior", icon: "sliders-horizontal" },
 ];
 
+// ── dev mock (browser only, no pywebview) ────────────────────────────────────
+if (typeof window !== "undefined" && !window.pywebview) {
+  const _mockPairs = [
+    { id: "pair1", name: "Q2 Sales", excel: "C:/Reports/Q2 Sales.xlsx", sheet: "https://docs.google.com/spreadsheets/d/abc123", sheetId: "abc123", worksheet: "Sheet1", rows: 1420, cols: 8, conflicts: 3, lastSync: "2m ago", every: "on change", state: "live", pinned: true, direction: "both", lastEditedSide: "excel", syncIntervalMinutes: 0, sheetsPollEnabled: false, sheetsPollInterval: 300, columnMappings: {} },
+    { id: "pair2", name: "Inventory Master", excel: "C:/Data/Inventory.xlsx", sheet: "https://docs.google.com/spreadsheets/d/def456", sheetId: "def456", worksheet: "Main", rows: 842, cols: 12, conflicts: 0, lastSync: "1h ago", every: "on change", state: "live", pinned: true, direction: "both", lastEditedSide: "sheets", syncIntervalMinutes: 15, sheetsPollEnabled: true, sheetsPollInterval: 300, columnMappings: { "Item Code": "SKU" } },
+    { id: "pair3", name: "HR Roster", excel: "C:/HR/Roster.xlsx", sheet: "https://docs.google.com/spreadsheets/d/ghi789", sheetId: "ghi789", worksheet: "Employees", rows: 214, cols: 6, conflicts: 0, lastSync: "3d ago", every: "on change", state: "idle", pinned: false, direction: "excelToSheet", lastEditedSide: "excel", syncIntervalMinutes: 0, sheetsPollEnabled: false, sheetsPollInterval: 300, columnMappings: {} },
+  ];
+  const _mockActivity = [
+    { t: "2:14 PM", state: "ok", msg: "Synced 12 rows in Q2 Sales", rows: "+12" },
+    { t: "1:58 PM", state: "yellow", msg: "Conflict resolved in Inventory Master — Excel wins", rows: "" },
+    { t: "1:30 PM", state: "ok", msg: "Synced 3 rows in Inventory Master", rows: "+3" },
+    { t: "12:05 PM", state: "red", msg: "Sync failed: Excel file locked by another process", rows: "" },
+    { t: "11:47 AM", state: "ok", msg: "Synced 28 rows in Q2 Sales", rows: "+28" },
+    { t: "10:22 AM", state: "blue", msg: "Watcher started for Q2 Sales", rows: "" },
+  ];
+  window.pywebview = {
+    api: {
+      get_initial_data: async () => ({ setup_complete: true, ready: true, active_pair_id: "pair1", pairs: _mockPairs, activity: _mockActivity, status: "watching", credentials_configured: true, config: { google_email: "you@gmail.com", notifications: true, minimize_to_tray: true, debounce_delay: 1.5, sync_direction: "Bidirectional", conflict_resolution: "Excel wins", pairs: [] } }),
+      sync_now: async () => ({ ok: true }),
+      toggle_pair_pause: async (id) => ({ ok: true, pairs: _mockPairs.map((p) => p.id === id ? { ...p, state: p.state === "live" ? "idle" : "live" } : p) }),
+      toggle_pair_pin: async (id) => ({ ok: true, pairs: _mockPairs.map((p) => p.id === id ? { ...p, pinned: !p.pinned } : p) }),
+      set_active_pair: async (id) => ({ ok: true, active_pair_id: id, pairs: _mockPairs }),
+      save_settings: async () => ({ ok: true, pairs: _mockPairs, active_pair_id: "pair1", config: { google_email: "you@gmail.com", notifications: true, minimize_to_tray: true, debounce_delay: 1.5, sync_direction: "Bidirectional", conflict_resolution: "Excel wins", pairs: [] } }),
+      delete_pair: async (id) => ({ ok: true, pairs: _mockPairs.filter((p) => p.id !== id), active_pair_id: "pair1" }),
+      get_conflict_log: async () => ({ ok: true, conflicts: [{ key: "row_4", col: "Revenue", excel_val: "84200", sheet_val: "82000", resolved_to: "excel" }, { key: "row_7", col: "Status", excel_val: "Closed", sheet_val: "Open", resolved_to: "excel" }, { key: "row_12", col: "Owner", excel_val: "Alice", sheet_val: "Bob", resolved_to: "excel" }] }),
+      pick_excel_file: async () => ({ ok: false, cancelled: true }),
+      pick_credentials_file: async () => ({ ok: false, cancelled: true }),
+      validate_sheet_url: async () => ({ ok: true, title: "Mock Sheet", worksheets: ["Sheet1"], sheet_id: "mock" }),
+      open_url: async () => ({ ok: true }),
+      reset_all: async () => ({ ok: false }),
+      export_activity: async () => ({ ok: false, cancelled: true }),
+      window_action: async () => {},
+    }
+  };
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 function getApi() {
   return window.pywebview?.api;
 }
@@ -42,13 +79,34 @@ function mapPair(pair) {
     state: pair.state || "idle",
     pinned: Boolean(pair.pinned),
     rows: Number(pair.rows || 0),
+    cols: Number(pair.cols || 0),
     conflicts: Number(pair.conflicts || 0),
+    lastEditedSide: pair.lastEditedSide || "excel",
+    syncIntervalMinutes: Number(pair.syncIntervalMinutes || 0),
+    sheetsPollEnabled: Boolean(pair.sheetsPollEnabled || false),
+    sheetsPollInterval: Number(pair.sheetsPollInterval || 300),
+    columnMappings: pair.columnMappings || {},
   };
 }
 
+const ACTIVITY_ICON_BY_STATE = {
+  red: "triangle-alert",
+  yellow: "shield-alert",
+  blue: "info",
+  ok: "check-circle-2",
+};
+
 function mapActivity(entry) {
-  const icon = entry.state === "red" ? "triangle-alert" : entry.state === "yellow" ? "shield-alert" : entry.state === "blue" ? "info" : "check-circle-2";
-  return [entry.t || "", icon, entry.msg || "", entry.rows || ""];
+  const state = entry.state || "ok";
+  const icon = ACTIVITY_ICON_BY_STATE[state] || "check-circle-2";
+  return [entry.t || "", icon, entry.msg || "", entry.rows || "", state];
+}
+
+function parseDisplayName(email) {
+  if (!email) return { name: "User", initial: "U" };
+  const local = email.split("@")[0];
+  const name = local.charAt(0).toUpperCase() + local.slice(1).replace(/[._-]/g, " ");
+  return { name, initial: local.charAt(0).toUpperCase() };
 }
 
 function Icon({ name, size = 16 }) {
@@ -76,6 +134,7 @@ function VerticalNav({ tab, setTab, pairs, activePairId, setActivePairId, theme,
     ["settings", "Settings", "settings"],
   ];
   const pinnedPairs = pairs.filter((pair) => pair.pinned).slice(0, 4);
+  const displayName = React.useMemo(() => parseDisplayName(googleEmail), [googleEmail]);
   return (
     <div className="vertical-nav">
       <div className="brand-block">
@@ -120,9 +179,9 @@ function VerticalNav({ tab, setTab, pairs, activePairId, setActivePairId, theme,
         ))}
       </div>
       <div className="sidebar-foot">
-        <div className="avatar">H</div>
+        <div className="avatar">{displayName.initial}</div>
         <div className="avatar-meta">
-          <strong>Hen</strong>
+          <strong>{displayName.name}</strong>
           <span>{googleEmail || "Not connected"}</span>
         </div>
         <button className="icon-toggle sidebar-theme" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} aria-label="Toggle dark mode">
@@ -163,8 +222,22 @@ function MobileNav({ tab, setTab, pairs, activePairId, setActivePairId, theme, s
   );
 }
 
-function Topbar({ onAddPair }) {
-  const title = "Dashboard";
+function Topbar({ tab, onAddPair, syncStatus, searchQuery, setSearchQuery }) {
+  const titles = { dashboard: "Dashboard", activity: "Activity", settings: "Settings" };
+  const title = titles[tab] || "Dashboard";
+  const dotClassMap = { watching: "live", syncing: "syncing", error: "error" };
+  const dotClass = dotClassMap[syncStatus] || "idle";
+  const searchRef = React.useRef(null);
+  React.useEffect(() => {
+    const handler = (event) => {
+      if (event.ctrlKey && event.key === "k") {
+        event.preventDefault();
+        searchRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
   return (
     <header className="topbar">
       <div className="crumbs">
@@ -175,9 +248,10 @@ function Topbar({ onAddPair }) {
       <div className="toolbar-spacer" />
       <div className="toolbar-search">
         <Icon name="search" size={13} />
-        <input placeholder="Search pairs, files, runs..." />
-        <span className="kbd">⌘K</span>
+        <input ref={searchRef} placeholder="Search pairs, files, runs..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+        <span className="kbd">Ctrl+K</span>
       </div>
+      <span className={`state-dot ${dotClass}`} title={syncStatus} style={{ flexShrink: 0 }} />
       <button className="btn compact" onClick={onAddPair}><Icon name="plus" /> New</button>
     </header>
   );
@@ -207,10 +281,21 @@ function PairMiniCard({ pair, active, onSelect }) {
   );
 }
 
-function Dashboard({ setTab, pairs, events, activePairId, setActivePairId, onSyncNow, onTogglePairPause, onChangeWorkbook }) {
-  const activePair = pairs.find((pair) => pair.id === activePairId) || pairs[0] || null;
+function Dashboard({ setTab, pairs, events, activePairId, setActivePairId, onSyncNow, onTogglePairPause, onChangeWorkbook, searchQuery, onOpenConflicts }) {
+  const query = (searchQuery || "").toLowerCase();
+  const visiblePairs = query
+    ? pairs.filter((pair) => pair.name.toLowerCase().includes(query) || pair.workbook.toLowerCase().includes(query))
+    : pairs;
+  // Prefer the active pair even when it doesn't match the search, so context isn't lost mid-filter.
+  const activePair =
+    visiblePairs.find((pair) => pair.id === activePairId) ||
+    pairs.find((pair) => pair.id === activePairId) ||
+    visiblePairs[0] ||
+    pairs[0] ||
+    null;
   const livePairs = pairs.filter((pair) => pair.state === "live").length;
   const totalConflicts = pairs.reduce((total, pair) => total + pair.conflicts, 0);
+  const conflictsClickable = totalConflicts > 0;
   return (
     <div className="dashboard-page">
       <div className="page-head">
@@ -235,8 +320,12 @@ function Dashboard({ setTab, pairs, events, activePairId, setActivePairId, onSyn
           <div className="stat-foot">Active watched pairs</div>
           <div className="stat-ghost"><Icon name="inbox" size={128} /></div>
         </div>
-        <div className="card stat-card">
-          <div className="card-top"><h2 className="card-title">Conflicts</h2></div>
+        <div
+          className={`card stat-card${conflictsClickable ? " clickable" : ""}`}
+          onClick={conflictsClickable ? () => onOpenConflicts(activePair?.id) : undefined}
+          style={conflictsClickable ? { cursor: "pointer" } : undefined}
+        >
+          <div className="card-top"><h2 className="card-title">Conflicts {conflictsClickable && <span className="tiny-badge" style={{ marginLeft: 4 }}>View</span>}</h2></div>
           <div className="stat-value">{totalConflicts}</div>
           <div className="stat-foot"><span className="tiny-badge"><Icon name="shield-check" size={12} /> Excel wins</span> current policy</div>
           <div className="stat-ghost"><Icon name="git-merge" size={128} /></div>
@@ -254,8 +343,9 @@ function Dashboard({ setTab, pairs, events, activePairId, setActivePairId, onSyn
 
         <div className="sync-pair-strip">
           {pairs.length === 0 && <div className="empty-state">No sync pairs yet. Finish onboarding to connect an Excel workbook and Google Sheet.</div>}
-          {pairs.map((pair) => (
-            <PairMiniCard key={pair.id} pair={pair} active={pair.id === activePair.id} onSelect={() => setActivePairId(pair.id)} />
+          {pairs.length > 0 && visiblePairs.length === 0 && <div className="empty-state compact">No pairs match your search.</div>}
+          {visiblePairs.map((pair) => (
+            <PairMiniCard key={pair.id} pair={pair} active={activePair && pair.id === activePair.id} onSelect={() => setActivePairId(pair.id)} />
           ))}
         </div>
 
@@ -288,9 +378,9 @@ function Dashboard({ setTab, pairs, events, activePairId, setActivePairId, onSyn
           <div className="card-top"><h2 className="card-title">Recent activity</h2><button className="btn" style={{ height: 32, padding: "0 10px" }} onClick={() => setTab("activity")}>View all</button></div>
           <div className="project-list">
             {events.length === 0 && <div className="empty-state compact">No activity yet.</div>}
-            {events.slice(0, 3).map(([time, icon, text, rows]) => (
+            {events.slice(0, 3).map(([time, icon, text, rows, state]) => (
               <div className="project-row" key={time + text}>
-                <div className="project-logo" style={{ background: "#168451" }}><Icon name={icon} size={15} /></div>
+                <div className={`project-logo activity-icon ${state || "ok"}`}><Icon name={icon} size={15} /></div>
                 <div><strong>{text}</strong><span>{time} {rows ? "- " + rows + " rows" : ""}</span></div>
               </div>
             ))}
@@ -455,7 +545,9 @@ function RulesStep({ data, update }) {
   );
 }
 
-function Activity({ events }) {
+function Activity({ events, searchQuery }) {
+  const query = (searchQuery || "").toLowerCase();
+  const visibleEvents = query ? events.filter(([, , text]) => text.toLowerCase().includes(query)) : events;
   return (
     <>
       <div className="page-head">
@@ -464,9 +556,10 @@ function Activity({ events }) {
       <div className="card">
         <div className="project-list">
           {events.length === 0 && <div className="empty-state compact">No activity yet.</div>}
-          {events.map(([time, icon, text, rows]) => (
+          {events.length > 0 && visibleEvents.length === 0 && <div className="empty-state compact">No matching activity.</div>}
+          {visibleEvents.map(([time, icon, text, rows, state]) => (
             <div className="project-row" key={time + text}>
-              <div className="project-logo" style={{ background: "#168451" }}><Icon name={icon} size={15} /></div>
+              <div className={`project-logo activity-icon ${state || "ok"}`}><Icon name={icon} size={15} /></div>
               <div><strong>{text}</strong><span>{time} {rows ? "- " + rows + " rows" : ""}</span></div>
             </div>
           ))}
@@ -503,6 +596,10 @@ function Settings({
       sheet_url: activePair.sheetUrl || "",
       sync_direction: config?.sync_direction || "Bidirectional",
       conflict_resolution: config?.conflict_resolution || "Excel wins",
+      sync_interval_minutes: activePair.syncIntervalMinutes ?? 0,
+      sheets_poll_enabled: activePair.sheetsPollEnabled ?? false,
+      sheets_poll_interval: activePair.sheetsPollInterval ?? 300,
+      column_mappings: activePair.columnMappings ?? {},
     });
   }, [activePair, config]);
   React.useEffect(() => {
@@ -554,7 +651,10 @@ function Settings({
               <div className="field wide-field"><label>Google Sheet URL</label><input className="input" value={pairDraft.sheet_url || ""} onChange={(event) => setPairDraft({ ...pairDraft, sheet_url: event.target.value })} /></div>
               <div className="field"><label>Sync direction</label><select className="select" value={pairDraft.sync_direction || "Bidirectional"} onChange={(event) => setPairDraft({ ...pairDraft, sync_direction: event.target.value })}><option>Bidirectional</option><option>Excel -&gt; Sheets</option><option>Sheets -&gt; Excel</option></select></div>
               <div className="field"><label>Conflict policy</label><select className="select" value={pairDraft.conflict_resolution || "Excel wins"} onChange={(event) => setPairDraft({ ...pairDraft, conflict_resolution: event.target.value })}><option>Excel wins</option><option>Sheets wins</option></select></div>
+              <div className="field"><label>Interval sync</label><select className="select" value={String(pairDraft.sync_interval_minutes ?? 0)} onChange={(e) => setPairDraft({ ...pairDraft, sync_interval_minutes: Number(e.target.value) })}><option value="0">Off</option><option value="5">Every 5 min</option><option value="15">Every 15 min</option><option value="30">Every 30 min</option><option value="60">Every 60 min</option></select></div>
+              <div className="field"><label>Poll Sheets for changes</label><select className="select" value={pairDraft.sheets_poll_enabled ? String(pairDraft.sheets_poll_interval ?? 300) : "off"} onChange={(e) => { const v = e.target.value; setPairDraft({ ...pairDraft, sheets_poll_enabled: v !== "off", sheets_poll_interval: v !== "off" ? Number(v) : 300 }); }}><option value="off">Off</option><option value="60">Every 1 min</option><option value="300">Every 5 min</option><option value="900">Every 15 min</option><option value="1800">Every 30 min</option></select></div>
             </div>
+            <ColumnMappingsEditor mappings={pairDraft.column_mappings || {}} onChange={(m) => setPairDraft({ ...pairDraft, column_mappings: m })} />
             <div className="control-row">
               <button className="btn primary" onClick={() => onSavePair(activePair.id, pairDraft)}><Icon name="save" /> Save pair</button>
               <button className="btn" onClick={() => onTogglePairPause(activePair.id)}><Icon name={activePair.state === "idle" ? "play" : "pause"} /> {activePair.state === "idle" ? "Resume pair" : "Pause pair"}</button>
@@ -589,6 +689,104 @@ function Settings({
   );
 }
 
+function ColumnMappingsEditor({ mappings, onChange }) {
+  const entries = Object.entries(mappings);
+  const addRow = () => onChange({ ...mappings, "": "" });
+  const removeRow = (excelCol) => {
+    const next = { ...mappings };
+    delete next[excelCol];
+    onChange(next);
+  };
+  // Rebuild via entries so the row's position in the list stays put when the Excel key changes.
+  const updateExcelCol = (oldKey, newKey) => {
+    const next = {};
+    for (const [excelCol, sheetsCol] of Object.entries(mappings)) {
+      next[excelCol === oldKey ? newKey : excelCol] = sheetsCol;
+    }
+    onChange(next);
+  };
+  const updateSheetsCol = (excelCol, sheetsCol) => onChange({ ...mappings, [excelCol]: sheetsCol });
+  return (
+    <div className="field wide-field" style={{ marginTop: 12 }}>
+      <label>Column mappings <span style={{ fontWeight: 400, opacity: 0.6 }}>(Excel col → Sheets col)</span></label>
+      {entries.map(([excelCol, sheetsCol], index) => (
+        <div key={excelCol || `new-${index}`} style={{ display: "flex", gap: 6, marginBottom: 4 }}>
+          <input className="input" placeholder="Excel column" value={excelCol} onChange={(event) => updateExcelCol(excelCol, event.target.value)} style={{ flex: 1 }} />
+          <span style={{ alignSelf: "center", opacity: 0.5 }}>→</span>
+          <input className="input" placeholder="Sheets column" value={sheetsCol} onChange={(event) => updateSheetsCol(excelCol, event.target.value)} style={{ flex: 1 }} />
+          <button className="btn" style={{ padding: "0 8px" }} onClick={() => removeRow(excelCol)}><Icon name="x" size={13} /></button>
+        </div>
+      ))}
+      <button className="btn" style={{ marginTop: 4 }} onClick={addRow}><Icon name="plus" size={13} /> Add mapping</button>
+    </div>
+  );
+}
+
+function ConflictModal({ pairId, onClose }) {
+  const [conflicts, setConflicts] = React.useState(null);
+  React.useEffect(() => {
+    if (!pairId) return;
+    let cancelled = false;
+    getApi()?.get_conflict_log?.(pairId).then((result) => {
+      if (!cancelled) setConflicts(result?.conflicts || []);
+    });
+    return () => { cancelled = true; };
+  }, [pairId]);
+  const cellStyle = { padding: "4px 8px" };
+  return (
+    <div className="overlay" onClick={onClose}>
+      <section className="glass-onboarding" style={{ maxWidth: 720, maxHeight: "80vh", overflow: "auto" }} onClick={(event) => event.stopPropagation()}>
+        <button className="overlay-close" onClick={onClose} aria-label="Close"><Icon name="x" /></button>
+        <div className="overlay-head">
+          <div>
+            <span className="tiny-badge"><Icon name="git-merge" size={12} /> Conflicts</span>
+            <h2>Conflict log</h2>
+            <p>Cells where Excel and Sheets disagreed this session.</p>
+          </div>
+        </div>
+        <div className="overlay-body">
+          {conflicts === null && <div className="empty-state compact loading-row"><span className="spin"><Icon name="loader-circle" size={14} /></span>Loading conflicts…</div>}
+          {conflicts !== null && conflicts.length === 0 && <div className="empty-state compact">No conflicts recorded this session.</div>}
+          {conflicts !== null && conflicts.length > 0 && (
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead>
+                <tr style={{ textAlign: "left", opacity: 0.6 }}>
+                  <th style={cellStyle}>Row key</th>
+                  <th style={cellStyle}>Column</th>
+                  <th style={cellStyle}>Excel value</th>
+                  <th style={cellStyle}>Sheets value</th>
+                  <th style={cellStyle}>Resolved to</th>
+                </tr>
+              </thead>
+              <tbody>
+                {conflicts.map((conflict, index) => (
+                  <tr key={index} style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+                    <td style={{ ...cellStyle, opacity: 0.7 }}>{conflict.key}</td>
+                    <td style={cellStyle}>{conflict.col}</td>
+                    <td style={cellStyle}>{conflict.excel_val || <em style={{ opacity: 0.4 }}>empty</em>}</td>
+                    <td style={cellStyle}>{conflict.sheet_val || <em style={{ opacity: 0.4 }}>empty</em>}</td>
+                    <td style={cellStyle}><span className="tiny-badge">{conflict.resolved_to}</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function Toast({ toast }) {
+  if (!toast) return null;
+  return (
+    <div className={`toast toast-${toast.type}`}>
+      <Icon name={toast.type === "error" ? "triangle-alert" : "check-circle-2"} size={14} />
+      {toast.msg}
+    </div>
+  );
+}
+
 function App() {
   const [tab, setTab] = React.useState("dashboard");
   const [showOnboarding, setShowOnboarding] = React.useState(true);
@@ -599,6 +797,14 @@ function App() {
   const [googleEmail, setGoogleEmail] = React.useState("");
   const [config, setConfig] = React.useState({});
   const [activePairId, setActivePairId] = React.useState("");
+  const [syncStatus, setSyncStatus] = React.useState("idle");
+  const [searchQuery, setSearchQuery] = React.useState("");
+  const [conflictPairId, setConflictPairId] = React.useState(null);
+  const [toast, setToast] = React.useState(null);
+  const showToast = React.useCallback((msg, type = "ok") => {
+    setToast({ msg, type });
+    window.setTimeout(() => setToast(null), 2800);
+  }, []);
 
   const applyInitialData = React.useCallback((payload) => {
     const nextPairs = (payload?.pairs || []).map(mapPair);
@@ -652,8 +858,8 @@ function App() {
 
   const savePair = React.useCallback(async (pairId, updates) => {
     const result = await getApi()?.save_settings?.(updates, pairId);
-    if (result?.ok) applyPairsResult(result);
-  }, [applyPairsResult]);
+    if (result?.ok) { applyPairsResult(result); showToast("Pair saved"); }
+  }, [applyPairsResult, showToast]);
 
   const togglePairPin = React.useCallback(async (pairId) => {
     const result = await getApi()?.toggle_pair_pin?.(pairId);
@@ -692,8 +898,8 @@ function App() {
       minimize_to_tray: Boolean(updates.minimize_to_tray),
       debounce_delay: Number(updates.debounce_delay || 1.5),
     }, activePairId || null);
-    if (result?.ok) applyPairsResult(result);
-  }, [activePairId, applyPairsResult]);
+    if (result?.ok) { applyPairsResult(result); showToast("Settings saved"); }
+  }, [activePairId, applyPairsResult, showToast]);
 
   const openAddPair = React.useCallback(() => {
     setOnboardingMode(pairs.length ? "create" : "setup");
@@ -715,9 +921,7 @@ function App() {
     window.__ss_event = (event) => {
       if (event.type === "pairs") setPairs((event.pairs || []).map(mapPair));
       if (event.type === "activity") setEvents((event.entries || []).map(mapActivity));
-      if (event.type === "status") {
-        // Reserved for future status chrome.
-      }
+      if (event.type === "status") setSyncStatus(event.status || "idle");
     };
     return () => {
       cancelled = true;
@@ -734,14 +938,16 @@ function App() {
         <MobileNav tab={tab} setTab={setTab} pairs={pairs} activePairId={activePairId} setActivePairId={selectPair} theme={theme} setTheme={setTheme} googleEmail={googleEmail} />
         <Sidebar tab={tab} setTab={setTab} pairs={pairs} activePairId={activePairId} setActivePairId={selectPair} theme={theme} setTheme={setTheme} googleEmail={googleEmail} />
         <main className="workspace">
-          <Topbar onAddPair={openAddPair} />
+          <Topbar tab={tab} onAddPair={openAddPair} syncStatus={syncStatus} searchQuery={searchQuery} setSearchQuery={setSearchQuery} />
           <section className="content">
-            {tab === "dashboard" && <Dashboard setTab={setTab} pairs={pairs} events={events} activePairId={activePairId} setActivePairId={selectPair} onSyncNow={syncNow} onTogglePairPause={togglePairPause} onChangeWorkbook={changeWorkbook} />}
-            {tab === "activity" && <Activity events={events} />}
+            {tab === "dashboard" && <Dashboard setTab={setTab} pairs={pairs} events={events} activePairId={activePairId} setActivePairId={selectPair} onSyncNow={syncNow} onTogglePairPause={togglePairPause} onChangeWorkbook={changeWorkbook} searchQuery={searchQuery} onOpenConflicts={setConflictPairId} />}
+            {tab === "activity" && <Activity events={events} searchQuery={searchQuery} />}
             {tab === "settings" && <Settings pairs={pairs} activePairId={activePairId} setActivePairId={selectPair} googleEmail={googleEmail} config={config} onAddPair={openAddPair} onSavePair={savePair} onTogglePairPause={togglePairPause} onTogglePairPin={togglePairPin} onDeletePair={deletePair} onPickCredentials={pickCredentials} onDisconnect={disconnectAndReset} onSaveAppSettings={saveAppSettings} />}
           </section>
         </main>
       </div>
+      {conflictPairId !== null && <ConflictModal pairId={conflictPairId} onClose={() => setConflictPairId(null)} />}
+      <Toast toast={toast} />
       {showOnboarding && <Onboarding mode={onboardingMode} onComplete={async (result) => {
         if (!result?.ok) {
           if (onboardingMode === "create") setShowOnboarding(false);

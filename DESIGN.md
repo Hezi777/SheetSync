@@ -667,3 +667,67 @@ The only "imagery" in the system is in-product Raycast UI screenshots and small 
 - **Dark mode is the only mode** — no light variant exists in the captured surfaces.
 - **Form validation states** beyond the focused-input border treatment are not present in the captured surfaces.
 - **Authenticated chrome** (account dashboard, billing settings, team management) not in the captured pages.
+
+---
+
+## SheetSync Implementation
+
+SheetSync adapts the Raycast system for a desktop app UI. The surface ladder, hairline borders, and no-shadow philosophy carry over directly. Key divergences:
+
+### Token map (Raycast → SheetSync)
+
+| Raycast token | SheetSync CSS var | Notes |
+|---|---|---|
+| `colors.canvas` (#07080a) | `--canvas`, `--shell` | Identical |
+| `colors.surface` (#0d0d0d) | `--surface` | Identical |
+| `colors.surface-elevated` (#101111) | `--surface-soft` | Identical |
+| `colors.surface-card` (#121212) | `--control` | Identical |
+| `colors.hairline` (#242728) | `--hairline` | Identical |
+| `colors.ink` (#f4f4f6) | `--ink` | Identical |
+| `colors.mute` (#9c9c9d) | `--steel` | Same value |
+| `colors.ash` (#6a6b6c) | `--stone` | Same value |
+| `colors.accent-green` (#59d499) | `--teal` | Sheets-side indicator |
+| — | `--green` (#16a34a) | SheetSync brand accent (not in Raycast palette) |
+| — | `--green-deep` / `--green-soft` | Brand tint variants |
+
+### Font substitution
+
+SheetSync uses **Satoshi** (not Inter) — same weight/spacing character, no `ss03` feature flag needed. Satoshi 400/500/700/900 are bundled as local woff2 in `src/sheetsync/ui/fonts/`. The font stack is:
+
+```css
+--font: "Satoshi", -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, sans-serif;
+```
+
+Satoshi weight `650` (variable-font intermediate between 600 and 700) is used for card titles and nav items — Satoshi supports this natively.
+
+### Light theme
+
+Raycast is dark-only. SheetSync adds a light theme via `body[data-theme="light"]` in `index.html`. The light palette shifts `--green` to `#168451` (forest green) and `--primary` to `#0c1110` (near-black CTA pill). All tokens flip; no JS is needed — set `document.body.dataset.theme`.
+
+### Component classes
+
+| Component | CSS class(es) | Notes |
+|---|---|---|
+| Card | `.card` | `border-radius: 10px`, hairline border |
+| Primary button | `.btn.primary` | White pill (dark) / dark pill (light) |
+| Danger button | `.btn.danger` | `color: var(--error)` only |
+| State indicator | `.state-dot`, `.state-pill` | `.live` = green glow, `.idle` = yellow |
+| Status badge | `.tiny-badge` | Green tint, used for inline labels |
+| Toggle switch | `.switch` / `.switch.on` | CSS-only, 34×20px pill |
+| Overlay | `.overlay` + `.glass-onboarding` | `backdrop-filter: blur(22px)` |
+| Form controls | `.input`, `.select`, `.textarea` | Min-height 44px, focus = 2px primary border |
+
+### Active / hover micro-animations
+
+- Nav items: `translateX(2px)` on hover, green radial gradient glow when active
+- Pair cards: `translateY(-1px)` on hover
+- All transitions: `150ms ease`
+
+### Background gradients
+
+Two radial gradients add depth without breaking the flat-surface philosophy:
+```css
+radial-gradient(circle at 14% 10%, rgba(89,212,153,.075), transparent 30%)  /* teal, top-left */
+radial-gradient(circle at 92% 90%, rgba(87,193,255,.055), transparent 34%)  /* blue, bottom-right */
+```
+Applied to `.frame` and `.content`. Do not increase opacity — they are intentionally near-invisible.

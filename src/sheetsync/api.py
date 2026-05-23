@@ -10,6 +10,11 @@ from typing import TYPE_CHECKING
 
 import webview
 
+try:
+    from plyer import notification as plyer_notification
+except Exception:  # plyer is optional — desktop notifications degrade silently.
+    plyer_notification = None  # type: ignore[assignment]
+
 from sheetsync.core.google_auth import (
     AuthError,
     connect_google,
@@ -39,6 +44,14 @@ if TYPE_CHECKING:
 class Api:
     def __init__(self, app: "SheetSyncApp") -> None:
         self._app = app
+
+    def _os_notify(self, title: str, message: str) -> None:
+        if not self._app.config.notifications or plyer_notification is None:
+            return
+        try:
+            plyer_notification.notify(title=title, message=message, app_name="SheetSync", timeout=5)
+        except Exception:
+            pass
 
     def _push(self, event: dict) -> None:
         try:
@@ -88,7 +101,7 @@ class Api:
             "sheet": pair.sheet_url,
             "sheetId": short_id,
             "rows": pair.stats.get("rows_synced", 0),
-            "cols": 0,
+            "cols": pair.stats.get("col_count", 0),
             "sheets": 1,
             "direction": self._dir_key(pair.sync_direction),
             "lastSync": self._rel_time(pair.last_sync_iso),
@@ -96,12 +109,16 @@ class Api:
             "state": "idle" if cfg.paused or pair.paused or not cfg.setup_complete or not credentials_configured() else "live",
             "owner": cfg.google_email,
             "lastEditor": cfg.google_email,
-            "lastEditedSide": "excel",
+            "lastEditedSide": pair.last_edited_side or "excel",
             "pinned": pair.pinned,
             "active": pair.id == cfg.active_pair_id,
             "worksheet": pair.worksheet_name,
             "queued": pair.queued_changes,
             "conflicts": pair.stats.get("conflicts_resolved", 0),
+            "syncIntervalMinutes": pair.sync_interval_minutes,
+            "sheetsPollEnabled": pair.sheets_poll_enabled,
+            "sheetsPollInterval": pair.sheets_poll_interval,
+            "columnMappings": pair.column_mappings,
         }
 
     def _build_pairs(self) -> list[dict]:
@@ -196,16 +213,19 @@ class Api:
             app.status = "watching"
             self._push({"type": "status", "status": "watching"})
             self._push({"type": "toast", "title": "Sync complete", "msg": msg, "kind": ""})
+            self._os_notify("Sync complete", msg)
         except ConnectionError as exc:
             app.status = "error"
             app._add_activity("error", str(exc), "")
             self._push({"type": "status", "status": "error"})
             self._push({"type": "toast", "title": "Offline", "msg": str(exc), "kind": "red"})
-        except (SyncError, AuthError, Exception) as exc:
+            self._os_notify("Offline", str(exc))
+        except Exception as exc:
             app.status = "error"
             app._add_activity("error", str(exc), "")
             self._push({"type": "status", "status": "error"})
             self._push({"type": "toast", "title": "Sync failed", "msg": str(exc), "kind": "red"})
+            self._os_notify("Sync failed", str(exc))
         self._push({"type": "activity", "entries": self._convert_activity(app.activity)})
         self._push({"type": "pairs", "pairs": self._build_pairs()})
 
@@ -293,6 +313,7 @@ class Api:
         pair_fields = {
             "name", "excel_path", "sheet_url", "worksheet_name", "match_column",
             "match_mode", "sync_direction", "conflict_resolution", "paused", "pinned",
+            "sync_interval_minutes", "sheets_poll_enabled", "sheets_poll_interval", "column_mappings",
         }
         app_fields = {"notifications", "minimize_to_tray", "debounce_delay"}
         has_pair_updates = any(key in pair_fields for key in updates)
@@ -301,6 +322,16 @@ class Api:
             return {"ok": False, "error": "Pair not found."}
         allowed_directions = {"Bidirectional", "Excel -> Sheets", "Sheets -> Excel"}
         allowed_conflicts = {"Excel wins", "Sheets wins"}
+
+        def coerce_number(raw: object, caster, lo, hi: float | None, error: str):
+            try:
+                cast_value = caster(raw)
+            except (ValueError, TypeError):
+                return None, {"ok": False, "error": error}
+            if hi is None:
+                return max(lo, cast_value), None
+            return max(lo, min(hi, cast_value)), None
+
         for key, value in updates.items():
             if key == "excel_path" and value and not Path(str(value)).exists():
                 return {"ok": False, "error": "The selected Excel workbook no longer exists."}
@@ -311,7 +342,20 @@ class Api:
             if key == "conflict_resolution" and value not in allowed_conflicts:
                 return {"ok": False, "error": "Choose a valid conflict policy."}
             if key == "debounce_delay":
-                value = max(0.5, min(30, float(value)))
+                value, err = coerce_number(value, float, 0.5, 30, "Debounce delay must be a number.")
+                if err:
+                    return err
+            if key == "sync_interval_minutes":
+                value, err = coerce_number(value, int, 0, None, "Sync interval must be a whole number.")
+                if err:
+                    return err
+            if key == "sheets_poll_interval":
+                value, err = coerce_number(value, int, 60, None, "Poll interval must be a whole number.")
+                if err:
+                    return err
+            if key == "column_mappings":
+                if not isinstance(value, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in value.items()):
+                    return {"ok": False, "error": "Column mappings must be a string-to-string dict."}
             if pair and key in pair_fields and hasattr(pair, key):
                 setattr(pair, key, value)
             elif key in app_fields and hasattr(cfg, key):
@@ -323,6 +367,12 @@ class Api:
         save_config(cfg)
         if cfg.setup_complete:
             self._app._start_watcher()
+        if pair:
+            changed_keys = updates.keys() & pair_fields
+            if "sync_interval_minutes" in changed_keys:
+                self._app._restart_interval_timer(pair.id)
+            if changed_keys & {"sheets_poll_enabled", "sheets_poll_interval"}:
+                self._app._restart_sheet_poller(pair.id)
         return {"ok": True, "config": asdict(cfg), "pairs": self._build_pairs(), "active_pair_id": cfg.active_pair_id}
 
     def complete_onboarding(self, data: dict) -> dict:
@@ -474,6 +524,10 @@ class Api:
             return {"ok": False, "cancelled": True}
         except Exception as exc:
             return {"ok": False, "error": str(exc)}
+
+    def get_conflict_log(self, pair_id: str) -> dict:
+        logs = self._app.engine.conflict_logs.get(pair_id, [])
+        return {"ok": True, "conflicts": logs}
 
     def open_url(self, url: str) -> dict:
         try:

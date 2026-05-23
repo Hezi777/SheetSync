@@ -5,19 +5,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
-## [Unreleased]
+## [1.0.2] — 2026-05-23
 
 ### Added
-- (list new features here)
-
-### Changed
-- (list behavior changes here)
+- Column mappings: rename Excel columns to different Sheets column names per pair.
+- Interval sync: optional timed sync every 5/15/30/60 minutes per pair.
+- Sheets polling: detect remote Sheet changes by hash and auto-sync.
+- Conflict log: per-cell conflict history viewable in the dashboard.
+- OS notifications via plyer after sync outcomes (respects notification setting).
+- Search filter in dashboard and activity log (Ctrl+K to focus).
+- Sync status dot in topbar.
+- `cols` stat displayed per pair.
 
 ### Fixed
-- (list bug fixes here)
-
-### Removed
-- (list removed features here)
+- `match_column` now correctly mapped through `column_mappings` before merge, preventing a guaranteed SyncError when the match column was also remapped.
+- Sheet poller and interval timer now check `status != "syncing"` before firing to prevent concurrent syncs.
+- `last_edited_side` no longer set to "sheets" for schedule-triggered syncs.
+- `save_settings` numeric coercions now return a proper error response instead of raising an unhandled ValueError.
+- Conflict log column names now show original Excel column names instead of Sheets-mapped names.
+- `ColumnMappingsEditor` React key fixed to prevent input corruption on delete.
+- Timer closures used incorrect `self._app.status` reference (now `self.status`).
 
 ---
 

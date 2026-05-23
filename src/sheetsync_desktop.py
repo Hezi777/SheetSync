@@ -30,6 +30,8 @@ class SheetSyncApp:
         self.activity: list[dict] = load_activity()
         self.status: str = "idle" if self.config.paused else "watching"
         self.watchers: dict[str, ExcelWatcher] = {}
+        self.interval_timers: dict[str, threading.Timer] = {}
+        self.sheet_pollers: dict[str, threading.Timer] = {}
         self.engine = SyncEngine(self.config, self._on_engine_event)
         self.api = Api(self)
         self.tray = TrayController(
@@ -87,11 +89,72 @@ class SheetSyncApp:
                 self._add_activity("error", f"Excel file not found for {pair.name}. Update the path in Settings.", "")
         if self.watchers:
             self.status = "watching"
+        for pair in self.config.pairs:
+            if not pair.paused:
+                self._start_interval_timer(pair.id)
+                self._start_sheet_poller(pair.id)
 
     def _stop_watcher(self) -> None:
         for watcher in self.watchers.values():
             watcher.stop()
         self.watchers = {}
+        for timer in self.interval_timers.values():
+            timer.cancel()
+        self.interval_timers = {}
+        for timer in self.sheet_pollers.values():
+            timer.cancel()
+        self.sheet_pollers = {}
+
+    def _find_pair(self, pair_id: str):
+        return next((pair for pair in self.config.pairs if pair.id == pair_id), None)
+
+    def _schedule(self, registry: dict[str, threading.Timer], pair_id: str, seconds: float, fire) -> None:
+        existing = registry.pop(pair_id, None)
+        if existing is not None:
+            existing.cancel()
+        timer = threading.Timer(seconds, fire)
+        timer.daemon = True
+        timer.start()
+        registry[pair_id] = timer
+
+    def _start_interval_timer(self, pair_id: str) -> None:
+        pair = self._find_pair(pair_id)
+        if pair is None or pair.sync_interval_minutes <= 0 or pair.paused or self.config.paused:
+            return
+
+        def fire() -> None:
+            if self.status != "syncing":
+                self.api._run_sync("schedule", pair_id)
+            self._start_interval_timer(pair_id)
+
+        self._schedule(self.interval_timers, pair_id, pair.sync_interval_minutes * 60, fire)
+
+    def _restart_interval_timer(self, pair_id: str) -> None:
+        existing = self.interval_timers.pop(pair_id, None)
+        if existing is not None:
+            existing.cancel()
+        self._start_interval_timer(pair_id)
+
+    def _start_sheet_poller(self, pair_id: str) -> None:
+        pair = self._find_pair(pair_id)
+        if pair is None or not pair.sheets_poll_enabled or pair.paused or self.config.paused:
+            return
+
+        def poll() -> None:
+            current_hash = self.engine.poll_sheet_hash(pair_id)
+            if current_hash and current_hash != pair.last_sheet_hash:
+                pair.last_sheet_hash = current_hash
+                if self.status != "syncing":
+                    self.api._run_sync("sheets_poll", pair_id)
+            self._start_sheet_poller(pair_id)
+
+        self._schedule(self.sheet_pollers, pair_id, pair.sheets_poll_interval or 300, poll)
+
+    def _restart_sheet_poller(self, pair_id: str) -> None:
+        existing = self.sheet_pollers.pop(pair_id, None)
+        if existing is not None:
+            existing.cancel()
+        self._start_sheet_poller(pair_id)
 
     def _on_engine_event(self, event: dict) -> None:
         if event.get("state"):

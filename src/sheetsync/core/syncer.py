@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import csv
+import hashlib
+import json
 import socket
 import time
 from dataclasses import dataclass
@@ -150,47 +152,85 @@ def ordered_keys(excel_map: dict[str, dict[str, object]], sheet_map: dict[str, d
     return sorted(keys, key=lambda value: int(value))
 
 
-def compute_merge(excel: TableData, sheet: TableData, key: str, config: AppConfig | SyncPairConfig) -> tuple[TableData, TableData, dict[str, int]]:
+def compute_sheet_hash(rows: list[dict]) -> str:
+    serialized = json.dumps([sorted(row.items()) for row in rows], sort_keys=True)
+    return hashlib.sha1(serialized.encode()).hexdigest()
+
+
+def apply_column_mappings(table: TableData, mappings: dict[str, str]) -> TableData:
+    """Rename Excel-side columns to their Sheets-side names. No-op for empty mappings."""
+    if not mappings:
+        return table
+    new_headers = [mappings.get(header, header) for header in table.headers]
+    new_rows = [{mappings.get(key, key): value for key, value in row.items()} for row in table.rows]
+    return TableData(new_headers, new_rows)
+
+
+def reverse_column_mappings(table: TableData, mappings: dict[str, str]) -> TableData:
+    """Inverse of apply_column_mappings — used to translate back before writing Excel."""
+    if not mappings:
+        return table
+    return apply_column_mappings(table, {sheets: excel for excel, sheets in mappings.items()})
+
+
+def compute_merge(excel: TableData, sheet: TableData, key: str, config: AppConfig | SyncPairConfig) -> tuple[TableData, TableData, dict[str, int], list[dict]]:
     excel_map = row_map(excel, key, config, "Excel file")
     sheet_map = row_map(sheet, key, config, "Google Sheet")
     headers = merge_headers(excel.headers, sheet.headers)
     all_keys = ordered_keys(excel_map, sheet_map, config)
     stats = {"added": 0, "modified": 0, "deleted": 0, "conflicts": 0, "rows": 0}
+    conflict_log: list[dict] = []
     merged_rows: list[dict[str, object]] = []
+    direction = config.sync_direction
     for item_key in all_keys:
         erow = excel_map.get(item_key)
         srow = sheet_map.get(item_key)
         if erow and not srow:
+            # Excel has a row Sheets doesn't — Sheets->Excel will erase it, else it propagates as an add.
             chosen = erow
-            stats["added"] += 1
+            bucket = "deleted" if direction == "Sheets -> Excel" else "added"
+            stats[bucket] += 1
         elif srow and not erow:
             chosen = srow
-            stats["added"] += 1
+            bucket = "deleted" if direction == "Excel -> Sheets" else "added"
+            stats[bucket] += 1
         elif erow == srow:
             chosen = erow or srow or {}
         else:
             stats["modified"] += 1
             stats["conflicts"] += 1
-            if config.conflict_resolution == "Excel wins":
-                chosen = erow or {}
-            elif config.conflict_resolution == "Sheets wins":
+            if config.conflict_resolution == "Sheets wins":
                 chosen = srow or {}
+                resolved_to = "sheets"
             else:
-                chosen = erow or srow or {}
+                chosen = erow or {}
+                resolved_to = "excel"
+            for col in headers:
+                excel_val = _normalize((erow or {}).get(col))
+                sheet_val = _normalize((srow or {}).get(col))
+                if excel_val != sheet_val:
+                    conflict_log.append({
+                        "key": item_key,
+                        "col": col,
+                        "excel_val": excel_val,
+                        "sheet_val": sheet_val,
+                        "resolved_to": resolved_to,
+                    })
         merged_rows.append({header: chosen.get(header, "") for header in headers})
     stats["rows"] = stats["added"] + stats["modified"] + stats["deleted"]
     merged = TableData(headers, merged_rows)
     if config.sync_direction == "Excel -> Sheets":
-        return excel, excel, stats
+        return excel, excel, stats, conflict_log
     if config.sync_direction == "Sheets -> Excel":
-        return sheet, sheet, stats
-    return merged, merged, stats
+        return sheet, sheet, stats, conflict_log
+    return merged, merged, stats, conflict_log
 
 
 class SyncEngine:
     def __init__(self, config: AppConfig, callback: StatusCallback | None = None):
         self.config = config
         self.callback = callback or (lambda event: None)
+        self.conflict_logs: dict[str, list[dict]] = {}
 
     def emit(self, kind: str, message: str, **data: object) -> None:
         self.callback({"kind": kind, "message": message, **data})
@@ -217,7 +257,15 @@ class SyncEngine:
             excel = read_excel(pair.excel_path)
             client = get_client(interactive=False)
             worksheet, sheet = read_sheet(client, pair)
-            excel_out, sheet_out, stats = compute_merge(excel, sheet, pair.match_column, pair)
+            mappings = pair.column_mappings or {}
+            excel_mapped = apply_column_mappings(excel, mappings)
+            match_key = mappings.get(pair.match_column, pair.match_column)
+            excel_out_mapped, sheet_out, stats, conflict_log = compute_merge(excel_mapped, sheet, match_key, pair)
+            excel_out = reverse_column_mappings(excel_out_mapped, mappings)
+            if mappings:
+                # Conflict log columns are in Sheets-space — translate back so the UI shows Excel column names.
+                reversed_map = {sheets: excel for excel, sheets in mappings.items()}
+                conflict_log = [{**entry, "col": reversed_map.get(entry["col"], entry["col"])} for entry in conflict_log]
             should_write_excel = pair.sync_direction in ("Bidirectional", "Sheets -> Excel")
             if reason == "Excel" and pair.sync_direction == "Bidirectional":
                 should_write_excel = False
@@ -226,10 +274,16 @@ class SyncEngine:
             if pair.sync_direction in ("Bidirectional", "Excel -> Sheets"):
                 write_sheet(worksheet, sheet_out)
             pair.last_sync_iso = now_iso()
+            if reason == "Excel":
+                pair.last_edited_side = "excel"
+            elif reason == "sheets_poll":
+                pair.last_edited_side = "sheets"
             pair.queued_changes = 0
+            pair.stats["col_count"] = len(excel.headers)
             pair.stats["total_syncs"] += 1
             pair.stats["rows_synced"] += stats["rows"]
             pair.stats["conflicts_resolved"] += stats["conflicts"]
+            self.conflict_logs[pair.id] = (self.conflict_logs.get(pair.id, []) + conflict_log)[-100:]
             self.config.last_sync_iso = pair.last_sync_iso
             self.config.queued_changes = sum(item.queued_changes for item in self.config.pairs)
             self.config.stats["total_syncs"] += 1
@@ -262,6 +316,15 @@ class SyncEngine:
             raise SyncError("Google Sheet was deleted or access was removed. Update the Sheet URL.") from exc
         finally:
             clear_lock()
+
+    def poll_sheet_hash(self, pair_id: str) -> str:
+        pair = ensure_pair(self.config, pair_id)
+        try:
+            client = get_client(interactive=False)
+            _, sheet = read_sheet(client, pair)
+            return compute_sheet_hash(sheet.rows)
+        except Exception:
+            return ""
 
 
 def export_activity_csv(path: str, entries: list[dict]) -> None:

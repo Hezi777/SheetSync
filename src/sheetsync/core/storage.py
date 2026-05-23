@@ -48,13 +48,20 @@ class SyncPairConfig:
     paused: bool = False
     pinned: bool = True
     last_sync_iso: str = ""
+    last_edited_side: str = ""
     queued_changes: int = 0
+    sync_interval_minutes: int = 0
+    sheets_poll_enabled: bool = False
+    sheets_poll_interval: int = 300
+    last_sheet_hash: str = ""
+    column_mappings: dict[str, str] = field(default_factory=dict)
     stats: dict[str, int] = field(
         default_factory=lambda: {
             "total_syncs": 0,
             "rows_synced": 0,
             "conflicts_resolved": 0,
             "errors": 0,
+            "col_count": 0,
         }
     )
 

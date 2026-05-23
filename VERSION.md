@@ -6,7 +6,7 @@ SheetSync uses Semantic Versioning for desktop releases:
 - `MINOR` changes for new user-facing features.
 - `PATCH` changes for bug fixes, UI polish, and packaging fixes.
 
-Current release: `1.0.1`.
+Current release: `1.0.2`.
 
 Every release should build both:
 
