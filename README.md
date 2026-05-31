@@ -5,51 +5,46 @@
 </h1>
 
 <p align="center">
-  A quiet Windows desktop app for syncing local Excel workbooks with Google Sheets.<br />
-  Watch files, run manual syncs, manage multiple pairs, and keep OAuth credentials local.
+  A Windows desktop app that keeps local Excel workbooks in sync with Google Sheets — automatically or on demand.
 </p>
 
 <p align="center">
   <a href="https://github.com/Hezi777/sheet-sync/releases/latest">
     <img src="https://img.shields.io/github/v/release/Hezi777/sheet-sync?style=for-the-badge&label=release" alt="Latest release" />
   </a>
-  <img src="https://img.shields.io/badge/Windows-desktop-111827?style=for-the-badge&logo=windows&logoColor=white" alt="Windows desktop" />
-  <img src="https://img.shields.io/badge/Python-backend-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python backend" />
-  <img src="https://img.shields.io/badge/React-ui-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React UI" />
-  <img src="https://img.shields.io/badge/Inno_Setup-installer-2D3748?style=for-the-badge" alt="Inno Setup installer" />
+  <img src="https://img.shields.io/badge/platform-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" />
+  <img src="https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white" />
+  <img src="https://img.shields.io/badge/React-UI-61DAFB?style=for-the-badge&logo=react&logoColor=black" />
+  <img src="https://img.shields.io/github/license/Hezi777/sheet-sync?style=for-the-badge" />
 </p>
 
 <p align="center">
-  <a href="#install">Install</a>
-  |
-  <a href="#features">Features</a>
-  |
-  <a href="#oauth-setup">OAuth Setup</a>
-  |
-  <a href="#development">Development</a>
-  |
+  <a href="#install">Install</a> &nbsp;|&nbsp;
+  <a href="#about">About</a> &nbsp;|&nbsp;
+  <a href="#oauth-setup">OAuth Setup</a> &nbsp;|&nbsp;
+  <a href="#getting-started-from-source">Development</a> &nbsp;|&nbsp;
   <a href="#release-build">Release Build</a>
 </p>
 
 ---
 
-## Overview
+## About
 
-SheetSync is built for people who still work in Excel locally but need a reliable Google Sheets mirror. It runs as a desktop app, stores its state on the current PC, and exposes the sync workflow through a local React interface inside PyWebView.
+SheetSync is built for people who still work in Excel locally but need a reliable Google Sheets mirror. It watches configured `.xlsx` files for changes, merges both sides, and writes the result back — with no server required and no shared credentials.
 
-The app does not ship with a shared Google OAuth client. Each user brings their own Google Cloud Desktop OAuth JSON, signs in locally, and can revoke access from Google Account settings.
+Each user supplies their own Google Cloud Desktop OAuth JSON. Credentials and tokens stay on the local PC. Google access can be revoked at any time from [Google Account settings](https://myaccount.google.com/permissions).
 
 ---
 
 ## Install
 
-Download the latest Windows installer from GitHub Releases:
+Download the latest Windows installer from the [Releases page](https://github.com/Hezi777/sheet-sync/releases/latest):
 
 | Release | Installer |
 |---|---|
 | `v1.0.1` | [`SheetSyncSetup-1.0.1.exe`](https://github.com/Hezi777/sheet-sync/releases/download/v1.0.1/SheetSyncSetup-1.0.1.exe) |
 
-The installer is generated with Inno Setup and installs SheetSync under the current user's local app directory.
+The installer is generated with Inno Setup and installs SheetSync under the current user's local app directory. No admin rights required.
 
 ---
 
@@ -57,14 +52,18 @@ The installer is generated with Inno Setup and installs SheetSync under the curr
 
 | Area | What SheetSync does |
 |---|---|
-| File watching | Watches configured `.xlsx` files and reacts to local save events |
-| Manual sync | Lets users trigger syncs from the desktop dashboard |
-| Multi-pair workflow | Supports adding, selecting, pausing, pinning, and removing sync pairs |
-| Sync direction | Supports `Bidirectional`, `Excel -> Sheets`, and `Sheets -> Excel` |
-| Conflict policy | Supports `Excel wins` and `Sheets wins` |
-| Google auth | Uses each user's own OAuth Desktop client JSON |
-| Offline state | Records queued/offline attempts for later manual or file-triggered syncs |
-| Packaging | Builds both a portable EXE and an Inno Setup installer |
+| File watching | Detects local `.xlsx` saves and triggers a sync automatically |
+| Bidirectional sync | Merges Excel and Sheets and writes the result to both sides |
+| Sync direction | Per-pair control: Bidirectional, Excel → Sheets, or Sheets → Excel |
+| Conflict handling | Configurable policy (Excel wins or Sheets wins) with a per-session conflict log |
+| Column mappings | Map Excel column names to their Sheets equivalents before syncing |
+| Interval sync | Optional timer-based sync (5, 15, 30, or 60 minutes) |
+| Sheets polling | Detect remote changes by hashing the sheet at a configurable interval |
+| Multiple pairs | Add, pin, pause, and remove independent sync pairs from one workspace |
+| Offline queue | Queues sync attempts when offline and retries on reconnect |
+| System tray | Minimize to tray to keep watchers running while the window is hidden |
+| Desktop notifications | Optional OS-level sync result alerts |
+| Activity log | Full event history exportable as CSV |
 
 ---
 
@@ -82,34 +81,37 @@ Screenshots are not checked into the repository yet. Add polished dashboard and 
 
 | Layer | Technology |
 |---|---|
-| Desktop shell | PyWebView |
-| Backend | Python |
-| File watching | watchdog |
-| Excel IO | openpyxl |
-| Google Sheets | gspread, google-auth, google-auth-oauthlib |
-| UI | React, Vite, lucide-react |
-| Tray/icon assets | pystray, Pillow |
-| Packaging | PyInstaller, Inno Setup |
+| Desktop shell | PyWebView 5.4 |
+| Backend | Python 3.11+ |
+| File watching | watchdog 6.0 |
+| Excel IO | openpyxl 3.1 |
+| Google Sheets | gspread 6.2, google-auth, google-auth-oauthlib |
+| UI | React, Vite, lucide-react, Satoshi font |
+| Tray / notifications | pystray, plyer, Pillow |
+| Packaging | PyInstaller 6.20, Inno Setup |
 
 ---
 
 ## OAuth Setup
 
-SheetSync needs OAuth because it reads and writes private spreadsheets as the connected Google account. An API key is not enough.
+SheetSync reads and writes private spreadsheets as the signed-in Google account. An API key is not sufficient — OAuth is required.
 
-1. Open [Google Cloud Console](https://console.cloud.google.com).
-2. Create or select a project.
-3. Enable Google Sheets API.
-4. Enable Google Drive API.
-5. Open APIs & Services, then Credentials.
-6. Create an OAuth Client ID.
-7. Choose application type `Desktop app`.
-8. Download the JSON file.
-9. Launch SheetSync, choose the JSON file, and sign in with Google.
+1. Open [Google Cloud Console](https://console.cloud.google.com) and create or select a project.
+2. Enable **Google Sheets API**.
+3. Enable **Google Drive API**.
+4. Go to **APIs & Services → Credentials → Create OAuth Client ID**.
+5. Choose application type **Desktop app** and download the JSON file.
+6. Launch SheetSync, choose the JSON on the first onboarding step, then sign in with Google.
 
 ---
 
 ## Getting Started From Source
+
+### Prerequisites
+
+- Windows 10 or later
+- Python 3.11+
+- Node.js 18+
 
 ### 1. Install Python dependencies
 
@@ -124,7 +126,7 @@ python -m venv .venv
 npm install
 ```
 
-### 3. Build the local UI bundle
+### 3. Build the UI bundle
 
 ```powershell
 npm run build
@@ -142,13 +144,13 @@ npm run build
 
 | Command | Description |
 |---|---|
-| `npm run dev` | Start the Vite UI dev server |
+| `npm run dev` | Start the Vite dev server (browser preview only) |
 | `npm run build` | Build `src/sheetsync/ui/dist` for PyWebView |
 | `python -m compileall src scripts` | Validate Python syntax |
-| `python scripts/build.py` | Build `dist/SheetSync.exe` |
+| `python scripts/build.py` | Build `dist/SheetSync.exe` via PyInstaller |
 | `python scripts/build_installer.py` | Build the Inno Setup installer |
 
-The desktop app loads `src/sheetsync/ui/dist/index.html`, so rebuild the UI before packaging or testing the production desktop shell.
+The desktop app loads `src/sheetsync/ui/dist/index.html`. Rebuild the UI before packaging or testing the production shell.
 
 ---
 
@@ -163,18 +165,15 @@ python scripts\build.py
 python scripts\build_installer.py
 ```
 
-Release outputs:
-
-| File | Purpose |
+| Output | Purpose |
 |---|---|
 | `dist\SheetSync.exe` | Portable desktop executable |
 | `packaging\installer\Output\SheetSyncSetup-<version>.exe` | Inno Setup installer |
 
-Every public release should:
-
+Release checklist:
 1. Update `packaging/installer/SheetSync.iss`.
 2. Update `VERSION.md`.
-3. Build the UI, EXE, and Inno Setup installer.
+3. Build the UI, EXE, and installer.
 4. Tag the commit as `v<version>`.
 5. Upload the setup EXE to GitHub Releases.
 
@@ -182,40 +181,36 @@ Every public release should:
 
 ## Project Structure
 
-```text
+```
 src/
   sheetsync/
-    api.py              PyWebView API exposed to the UI
+    api.py              PyWebView JS-to-Python bridge
     core/               auth, storage, sync engine, tray, watcher
-    ui/                 React/Vite desktop UI
-      dist/             built UI loaded by PyWebView
-  sheetsync_desktop.py  desktop entry point
+    ui/                 React/Vite UI source
+      dist/             built bundle loaded by PyWebView
+  sheetsync_desktop.py  entry point
 assets/
-  icons/                source app logo and Windows ICO
-packaging/
-  installer/            Inno Setup script
+  icons/                app logo and Windows ICO
 scripts/
-  build.py              PyInstaller build helper
-  build_installer.py    Inno Setup build helper
+  build.py              PyInstaller helper
+  build_installer.py    Inno Setup helper
 ```
-
-Generated `build/`, root `dist/`, `.spec`, `.exe`, and installer output files are ignored. Publish installers through GitHub Releases, not source control.
 
 ---
 
 ## Local Data
 
-Runtime data is stored in `%APPDATA%\SheetSync`:
+All runtime state is stored in `%APPDATA%\SheetSync`:
 
 | File | Purpose |
 |---|---|
 | `config.json` | App settings and sync pair configuration |
-| `credentials.json` | User-provided Google OAuth Desktop client |
+| `credentials.json` | User-supplied Google OAuth Desktop client |
 | `token.json` | Local Google OAuth token |
-| `activity.json` | Local sync activity history |
-| `sync_queue.json` | Queued/offline sync attempts |
+| `activity.json` | Sync activity history |
+| `sync_queue.json` | Queued offline sync attempts |
 
-These files are local machine state and should never be committed.
+These files are machine-local and should never be committed to source control.
 
 ---
 
@@ -225,19 +220,29 @@ These files are local machine state and should never be committed.
 |---|---|
 | `Choose your own Google OAuth Desktop client JSON before signing in` | Restart onboarding and choose the OAuth Desktop client JSON. |
 | `Google account is not connected` | Connect Google from onboarding or Settings. |
-| `Excel file not found` | Choose the moved or renamed workbook in Settings. |
-| `Waiting for Excel to release file` | Excel is still writing the workbook; SheetSync retries. |
-| `Match column 'ID' is missing` | Add the configured match column to both header rows or use row-position matching. |
-| `Offline` | SheetSync records the attempted sync and retries on a later manual or Excel-triggered sync. |
+| `Excel file not found` | Update the path in Settings to the moved or renamed workbook. |
+| `Waiting for Excel to release file` | Excel is still writing the file; SheetSync retries automatically. |
+| `Match column 'ID' is missing` | Add the configured column to both header rows, or switch to row-position matching. |
+| `Offline` | SheetSync queues the attempt and retries on the next file-triggered or manual sync. |
 
 ---
 
 ## Privacy
 
-SheetSync stores OAuth credentials and tokens locally on the user's PC. Spreadsheet data is sent only to Google's APIs for the sheet you configure. OAuth access can be revoked from Google Account security settings.
+OAuth credentials and tokens are stored locally on the user's PC. Spreadsheet data is sent only to Google's APIs for the configured sheet. Access can be revoked at any time from [Google Account security settings](https://myaccount.google.com/permissions).
 
 ---
 
-## Legacy Builds
+## Contributing
 
-The old Flet version is preserved in git history at commit `5472e82`. Keep legacy installers as release artifacts if needed; do not commit generated `.exe` or setup files into this repository.
+1. Fork the repository.
+2. Create a feature branch: `git checkout -b feature/your-feature`
+3. Commit your changes: `git commit -m "Add your feature"`
+4. Push to the branch: `git push origin feature/your-feature`
+5. Open a Pull Request.
+
+---
+
+## License
+
+This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
