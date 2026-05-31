@@ -9,13 +9,13 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Hezi777/sheet-sync/releases/latest">
-    <img src="https://img.shields.io/github/v/release/Hezi777/sheet-sync?style=for-the-badge&label=release" alt="Latest release" />
+  <a href="https://github.com/Hezi777/SheetSync/releases/latest">
+    <img src="https://img.shields.io/github/v/release/Hezi777/SheetSync?style=for-the-badge&label=release" alt="Latest release" />
   </a>
   <img src="https://img.shields.io/badge/platform-Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" />
   <img src="https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white" />
   <img src="https://img.shields.io/badge/React-UI-61DAFB?style=for-the-badge&logo=react&logoColor=black" />
-  <img src="https://img.shields.io/github/license/Hezi777/sheet-sync?style=for-the-badge" />
+  <img src="https://img.shields.io/github/license/Hezi777/SheetSync?style=for-the-badge" />
 </p>
 
 <p align="center">
@@ -38,11 +38,11 @@ Each user supplies their own Google Cloud Desktop OAuth JSON. Credentials and to
 
 ## Install
 
-Download the latest Windows installer from the [Releases page](https://github.com/Hezi777/sheet-sync/releases/latest):
+Download the latest Windows installer from the [Releases page](https://github.com/Hezi777/SheetSync/releases/latest):
 
 | Release | Installer |
 |---|---|
-| `v1.0.1` | [`SheetSyncSetup-1.0.1.exe`](https://github.com/Hezi777/sheet-sync/releases/download/v1.0.1/SheetSyncSetup-1.0.1.exe) |
+| `v1.0.1` | [`SheetSyncSetup-1.0.1.exe`](https://github.com/Hezi777/SheetSync/releases/download/v1.0.1/SheetSyncSetup-1.0.1.exe) |
 
 The installer is generated with Inno Setup and installs SheetSync under the current user's local app directory. No admin rights required.
 
