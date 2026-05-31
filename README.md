@@ -69,11 +69,9 @@ The installer is generated with Inno Setup and installs SheetSync under the curr
 
 ## Screenshots
 
-Screenshots are not checked into the repository yet. Add polished dashboard and onboarding captures under `docs/screenshots/`, then reference them here:
-
-| Dashboard | Onboarding |
-|---|---|
-| `docs/screenshots/dashboard.png` | `docs/screenshots/onboarding.png` |
+| Dashboard |
+|---|
+| ![SheetSync Dashboard](docs/screenshots/dashboard.png) |
 
 ---
 
