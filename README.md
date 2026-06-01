@@ -5,7 +5,7 @@
 </h1>
 
 <p align="center">
-  A Windows desktop app that keeps local Excel workbooks in sync with Google Sheets — automatically or on demand.
+  A Windows desktop app that keeps local Excel workbooks in sync with Google Sheets - automatically or on demand.
 </p>
 
 <p align="center">
@@ -30,7 +30,7 @@
 
 ## About
 
-SheetSync is built for people who still work in Excel locally but need a reliable Google Sheets mirror. It watches configured `.xlsx` files for changes, merges both sides, and writes the result back — with no server required and no shared credentials.
+SheetSync is built for people who still work in Excel locally but need a reliable Google Sheets mirror. It watches configured `.xlsx` files for changes, merges both sides, and writes the result back - with no server required and no shared credentials.
 
 Each user supplies their own Google Cloud Desktop OAuth JSON. Credentials and tokens stay on the local PC. Google access can be revoked at any time from [Google Account settings](https://myaccount.google.com/permissions).
 
@@ -54,7 +54,7 @@ The installer is generated with Inno Setup and installs SheetSync under the curr
 |---|---|
 | File watching | Detects local `.xlsx` saves and triggers a sync automatically |
 | Bidirectional sync | Merges Excel and Sheets and writes the result to both sides |
-| Sync direction | Per-pair control: Bidirectional, Excel → Sheets, or Sheets → Excel |
+| Sync direction | Per-pair control: Bidirectional, Excel to Sheets, or Sheets to Excel |
 | Conflict handling | Configurable policy (Excel wins or Sheets wins) with a per-session conflict log |
 | Column mappings | Map Excel column names to their Sheets equivalents before syncing |
 | Interval sync | Optional timer-based sync (5, 15, 30, or 60 minutes) |
@@ -92,12 +92,12 @@ The installer is generated with Inno Setup and installs SheetSync under the curr
 
 ## OAuth Setup
 
-SheetSync reads and writes private spreadsheets as the signed-in Google account. An API key is not sufficient — OAuth is required.
+SheetSync reads and writes private spreadsheets as the signed-in Google account. An API key is not sufficient - OAuth is required.
 
 1. Open [Google Cloud Console](https://console.cloud.google.com) and create or select a project.
 2. Enable **Google Sheets API**.
 3. Enable **Google Drive API**.
-4. Go to **APIs & Services → Credentials → Create OAuth Client ID**.
+4. Go to **APIs & Services > Credentials > Create OAuth Client ID**.
 5. Choose application type **Desktop app** and download the JSON file.
 6. Launch SheetSync, choose the JSON on the first onboarding step, then sign in with Google.
 
@@ -105,34 +105,13 @@ SheetSync reads and writes private spreadsheets as the signed-in Google account.
 
 ## Getting Started From Source
 
-### Prerequisites
-
-- Windows 10 or later
-- Python 3.11+
-- Node.js 18+
-
-### 1. Install Python dependencies
+**Prerequisites:** Windows 10+, Python 3.11+, Node.js 18+
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\pip install -r requirements.txt
-```
-
-### 2. Install UI dependencies
-
-```powershell
 npm install
-```
-
-### 3. Build the UI bundle
-
-```powershell
 npm run build
-```
-
-### 4. Start the desktop app
-
-```powershell
 .\.venv\Scripts\python src\sheetsync_desktop.py
 ```
 
@@ -243,4 +222,4 @@ OAuth credentials and tokens are stored locally on the user's PC. Spreadsheet da
 
 ## License
 
-This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
+MIT - see the [LICENSE](LICENSE) file for details.
