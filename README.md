@@ -260,11 +260,3 @@ OAuth credentials and tokens are stored locally on the user's PC. Spreadsheet da
 5. Open a Pull Request.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
-
----
-
-## License
-
-MIT - see the [LICENSE](LICENSE) file for details.
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
