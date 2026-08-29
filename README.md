@@ -53,6 +53,36 @@ Each user supplies their own Google Cloud Desktop OAuth JSON. Credentials and to
 
 ---
 
+## What's interesting here
+
+Most "sync tool" projects are one-directional file copies. The parts of this
+one that took the real work:
+
+- **Bidirectional merge, not overwrite.** Both sides can change between syncs, so
+  a run has to reconcile two diverged copies rather than pick a winner wholesale.
+  Conflicts resolve under a configurable policy (Excel wins or Sheets wins) and
+  every conflict is written to a per-session log, so a silent wrong merge is
+  always traceable after the fact.
+- **Change detection without webhooks.** Google Sheets gives you no push
+  notification for a desktop app, so remote edits are caught by hashing the sheet
+  on an interval and comparing. Local edits come from a `watchdog` file observer
+  on the `.xlsx`. Two completely different detection mechanisms feeding one
+  sync path.
+- **Offline queue.** Sync attempts made without a connection are queued and
+  replayed on reconnect, because the failure case for a background desktop tool
+  is a laptop that closed mid-write, not a clean error.
+- **Column mapping.** Excel headers and Sheets headers drift apart in practice, so
+  pairs carry an explicit name-to-name mapping rather than assuming column order.
+- **No server, no shared credentials.** Each user supplies their own Google Cloud
+  Desktop OAuth client. Tokens never leave the machine and access is revocable
+  from the user's own Google account settings. There is no backend to trust.
+
+The unglamorous part is the packaging: PyWebView hosting a React UI, frozen with
+PyInstaller and wrapped in an Inno Setup installer that needs no admin rights.
+
+
+---
+
 ## Install
 
 Download the latest Windows installer from the [Releases page](https://github.com/Hezi777/SheetSync/releases/latest):
