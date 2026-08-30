@@ -89,7 +89,7 @@ Download the latest Windows installer from the [Releases page](https://github.co
 
 | Release | Installer |
 |---|---|
-| `v1.0.1` | [`SheetSyncSetup-1.0.1.exe`](https://github.com/Hezi777/SheetSync/releases/download/v1.0.1/SheetSyncSetup-1.0.1.exe) |
+| `v1.0.2` | [`SheetSyncSetup-1.0.2.exe`](https://github.com/Hezi777/SheetSync/releases/download/v1.0.2/SheetSyncSetup-1.0.2.exe) |
 
 The installer is generated with Inno Setup and installs SheetSync under the current user's local app directory. No admin rights required.
 

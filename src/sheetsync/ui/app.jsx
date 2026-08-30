@@ -315,9 +315,9 @@ function Dashboard({ setTab, pairs, events, activePairId, setActivePairId, onSyn
           <div className="stat-ghost"><Icon name="clock-3" size={128} /></div>
         </div>
         <div className="card stat-card">
-          <div className="card-top"><h2 className="card-title">Pending changes</h2></div>
+          <div className="card-top"><h2 className="card-title">Active watchers</h2></div>
           <div className="stat-value">{livePairs}</div>
-          <div className="stat-foot">Active watched pairs</div>
+          <div className="stat-foot">of {pairs.length} sync pairs</div>
           <div className="stat-ghost"><Icon name="inbox" size={128} /></div>
         </div>
         <div
